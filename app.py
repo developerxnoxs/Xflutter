@@ -8,7 +8,7 @@ from flask import Flask, render_template, request, jsonify, send_file, Response
 
 from static_scanner import scan_binary, parse_blutter_output, get_all_strings, get_asm_tree
 from extract_dart_info import extract_dart_info
-from db import init_db, save_job, load_all_jobs
+from db import init_db, save_job, load_all_jobs, delete_job
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500 MB
@@ -300,6 +300,40 @@ def download_file(job_id, filename):
     if not path or not os.path.isfile(path):
         return 'File tidak ditemukan', 404
     return send_file(path, as_attachment=True)
+
+
+@app.route('/job/<job_id>/delete', methods=['POST'])
+def job_delete(job_id):
+    """Delete a job from DB, in-memory dict, and disk files."""
+    job = jobs.get(job_id)
+    if not job:
+        return jsonify({'error': 'Job tidak ditemukan'}), 404
+
+    # Remove from in-memory store
+    jobs.pop(job_id, None)
+
+    # Remove from SQLite
+    delete_job(job_id)
+
+    # Remove result files from disk (non-blocking, best-effort)
+    import shutil
+    for dir_key in ('out_dir',):
+        d = job.get(dir_key, '')
+        if d and os.path.isdir(d):
+            try:
+                shutil.rmtree(d)
+            except Exception:
+                pass
+
+    # Remove upload dir too (job_id folder inside uploads/)
+    upload_job_dir = os.path.join(UPLOAD_DIR, job_id)
+    if os.path.isdir(upload_job_dir):
+        try:
+            shutil.rmtree(upload_job_dir)
+        except Exception:
+            pass
+
+    return jsonify({'ok': True})
 
 
 if __name__ == '__main__':

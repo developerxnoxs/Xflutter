@@ -92,6 +92,12 @@ def _rehydrate_scripts(blutter: dict, out_dir: str) -> dict:
     return blutter
 
 
+def delete_job(job_id: str):
+    """Remove a job from the database."""
+    with _conn() as c:
+        c.execute('DELETE FROM jobs WHERE id = ?', (job_id,))
+
+
 def load_all_jobs() -> dict:
     """Return all jobs as {job_id: job_dict}, ready to merge into in-memory `jobs`."""
     result = {}

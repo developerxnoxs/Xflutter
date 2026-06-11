@@ -1,56 +1,118 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="id">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Xflutter — Flutter Reverse Engineering</title>
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: #0d1117; color: #c9d1d9; font-family: 'Segoe UI', system-ui, sans-serif; min-height: 100vh; }
-  .header { background: #161b22; border-bottom: 1px solid #30363d; padding: 16px 24px; display: flex; align-items: center; gap: 12px; }
-  .header h1 { font-size: 1.3rem; font-weight: 700; color: #58a6ff; }
-  .header .badge { background: #1f6feb22; color: #58a6ff; border: 1px solid #1f6feb; border-radius: 20px; padding: 2px 10px; font-size: 0.75rem; }
-  .container { max-width: 860px; margin: 48px auto; padding: 0 24px; }
-  .hero { text-align: center; margin-bottom: 48px; }
-  .hero h2 { font-size: 2rem; font-weight: 700; color: #e6edf3; margin-bottom: 12px; }
-  .hero p { color: #8b949e; font-size: 1.05rem; line-height: 1.6; }
-  .features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 40px; }
-  .feature { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 18px; }
-  .feature .icon { font-size: 1.5rem; margin-bottom: 8px; }
-  .feature h3 { font-size: 0.9rem; font-weight: 600; color: #e6edf3; margin-bottom: 4px; }
-  .feature p { font-size: 0.8rem; color: #8b949e; }
-  .card { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 32px; }
-  .tabs { display: flex; gap: 8px; margin-bottom: 28px; }
-  .tab { padding: 8px 20px; border-radius: 8px; border: 1px solid #30363d; background: transparent; color: #8b949e; cursor: pointer; font-size: 0.9rem; transition: all 0.15s; }
-  .tab.active { background: #1f6feb; border-color: #1f6feb; color: white; }
-  .tab:hover:not(.active) { border-color: #58a6ff; color: #58a6ff; }
-  .tab-content { display: none; }
-  .tab-content.active { display: block; }
-  .dropzone { border: 2px dashed #30363d; border-radius: 10px; padding: 48px 24px; text-align: center; cursor: pointer; transition: all 0.15s; position: relative; }
-  .dropzone:hover, .dropzone.dragover { border-color: #58a6ff; background: #1f6feb11; }
-  .dropzone input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
-  .dropzone .dz-icon { font-size: 2.5rem; margin-bottom: 12px; }
-  .dropzone .dz-text { color: #8b949e; font-size: 0.95rem; }
-  .dropzone .dz-text strong { color: #58a6ff; }
-  .dropzone .dz-filename { margin-top: 10px; color: #3fb950; font-size: 0.9rem; font-weight: 600; }
-  .so-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-  .field-label { font-size: 0.85rem; color: #8b949e; margin-bottom: 6px; font-weight: 500; }
-  .btn-analyze { width: 100%; padding: 14px; background: #238636; border: none; border-radius: 8px; color: white; font-size: 1rem; font-weight: 600; cursor: pointer; margin-top: 24px; transition: background 0.15s; }
-  .btn-analyze:hover { background: #2ea043; }
-  .btn-analyze:disabled { background: #21262d; color: #484f58; cursor: not-allowed; }
-  .progress-section { display: none; }
-  .progress-section.active { display: block; }
-  .progress-bar-wrap { background: #21262d; border-radius: 6px; height: 8px; overflow: hidden; margin: 16px 0; }
-  .progress-bar { height: 100%; background: linear-gradient(90deg, #238636, #3fb950); border-radius: 6px; transition: width 0.3s; width: 0%; }
-  .log-box { background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: 16px; height: 220px; overflow-y: auto; font-family: 'Courier New', monospace; font-size: 0.82rem; line-height: 1.6; }
-  .log-line { color: #8b949e; }
-  .log-line.ok { color: #3fb950; }
-  .log-line.warn { color: #d29922; }
-  .log-line.err { color: #f85149; }
-  .status-label { font-size: 0.85rem; font-weight: 600; color: #58a6ff; margin-bottom: 8px; }
-  .view-results-btn { width: 100%; padding: 14px; background: #1f6feb; border: none; border-radius: 8px; color: white; font-size: 1rem; font-weight: 600; cursor: pointer; margin-top: 16px; transition: background 0.15s; display: none; }
-  .view-results-btn:hover { background: #388bfd; }
-  @media (max-width: 600px) { .features { grid-template-columns: 1fr; } .so-row { grid-template-columns: 1fr; } }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #0d1117; color: #c9d1d9; font-family: 'Segoe UI', system-ui, sans-serif; min-height: 100vh; }
+
+/* ── Header ── */
+.header { background: #161b22; border-bottom: 1px solid #30363d; padding: 14px 24px; display: flex; align-items: center; gap: 10px; }
+.header h1 { font-size: 1.25rem; font-weight: 700; color: #58a6ff; }
+.header .badge { background: #1f6feb22; color: #58a6ff; border: 1px solid #1f6feb; border-radius: 20px; padding: 2px 10px; font-size: 0.75rem; white-space: nowrap; }
+.header-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.header-link { color: #8b949e; text-decoration: none; font-size: 0.82rem; border: 1px solid #30363d; padding: 5px 12px; border-radius: 6px; white-space: nowrap; transition: all 0.15s; }
+.header-link:hover { color: #58a6ff; border-color: #58a6ff; }
+
+/* ── Layout ── */
+.container { max-width: 860px; margin: 40px auto; padding: 0 24px; }
+
+/* ── Hero ── */
+.hero { text-align: center; margin-bottom: 40px; }
+.hero h2 { font-size: 2rem; font-weight: 700; color: #e6edf3; margin-bottom: 12px; }
+.hero p { color: #8b949e; font-size: 1rem; line-height: 1.7; }
+
+/* ── Features ── */
+.features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 32px; }
+.feature { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 18px; }
+.feature .icon { font-size: 1.5rem; margin-bottom: 8px; }
+.feature h3 { font-size: 0.9rem; font-weight: 600; color: #e6edf3; margin-bottom: 4px; }
+.feature p { font-size: 0.8rem; color: #8b949e; line-height: 1.5; }
+
+/* ── Upload card ── */
+.card { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 28px; }
+.tabs { display: flex; gap: 8px; margin-bottom: 24px; }
+.tab { flex: 1; padding: 9px 16px; border-radius: 8px; border: 1px solid #30363d; background: transparent; color: #8b949e; cursor: pointer; font-size: 0.88rem; transition: all 0.15s; text-align: center; }
+.tab.active { background: #1f6feb; border-color: #1f6feb; color: white; }
+.tab:hover:not(.active) { border-color: #58a6ff; color: #58a6ff; }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+/* ── Dropzones ── */
+.dropzone { border: 2px dashed #30363d; border-radius: 10px; padding: 40px 20px; text-align: center; cursor: pointer; transition: all 0.15s; position: relative; }
+.dropzone:hover, .dropzone.dragover { border-color: #58a6ff; background: #1f6feb11; }
+.dropzone input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+.dropzone .dz-icon { font-size: 2.2rem; margin-bottom: 10px; }
+.dropzone .dz-text { color: #8b949e; font-size: 0.9rem; }
+.dropzone .dz-text strong { color: #58a6ff; }
+.dropzone .dz-filename { margin-top: 10px; color: #3fb950; font-size: 0.88rem; font-weight: 600; word-break: break-all; }
+.so-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.field-label { font-size: 0.85rem; color: #8b949e; margin-bottom: 6px; font-weight: 500; }
+
+/* ── Buttons ── */
+.btn-analyze { width: 100%; padding: 14px; background: #238636; border: none; border-radius: 8px; color: white; font-size: 1rem; font-weight: 600; cursor: pointer; margin-top: 20px; transition: background 0.15s; }
+.btn-analyze:hover { background: #2ea043; }
+.btn-analyze:disabled { background: #21262d; color: #484f58; cursor: not-allowed; }
+.view-results-btn { width: 100%; padding: 14px; background: #1f6feb; border: none; border-radius: 8px; color: white; font-size: 1rem; font-weight: 600; cursor: pointer; margin-top: 14px; transition: background 0.15s; display: none; }
+.view-results-btn:hover { background: #388bfd; }
+
+/* ── Progress ── */
+.progress-section { display: none; margin-top: 24px; }
+.progress-section.active { display: block; }
+.progress-bar-wrap { background: #21262d; border-radius: 6px; height: 8px; overflow: hidden; margin: 14px 0; }
+.progress-bar { height: 100%; background: linear-gradient(90deg, #238636, #3fb950); border-radius: 6px; transition: width 0.3s; width: 0%; }
+.log-box { background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: 14px; height: 200px; overflow-y: auto; font-family: 'Courier New', monospace; font-size: 0.8rem; line-height: 1.6; }
+.log-line { color: #8b949e; }
+.log-line.ok { color: #3fb950; }
+.log-line.warn { color: #d29922; }
+.log-line.err { color: #f85149; }
+.status-label { font-size: 0.85rem; font-weight: 600; color: #58a6ff; margin-bottom: 6px; }
+
+/* ── Responsive: Tablet (iPad) 601–1024px ── */
+@media (max-width: 1024px) {
+  .container { margin: 32px auto; }
+  .hero h2 { font-size: 1.7rem; }
+}
+
+/* ── Responsive: Mobile ≤600px ── */
+@media (max-width: 600px) {
+  .header { padding: 12px 16px; gap: 8px; }
+  .header h1 { font-size: 1.1rem; }
+  .header .badge { display: none; }
+  .header-link { font-size: 0.78rem; padding: 5px 10px; }
+
+  .container { margin: 20px auto; padding: 0 16px; }
+
+  .hero { margin-bottom: 24px; }
+  .hero h2 { font-size: 1.4rem; }
+  .hero p { font-size: 0.9rem; }
+  .hero br { display: none; }
+
+  .features { grid-template-columns: 1fr; gap: 10px; margin-bottom: 20px; }
+  .feature { display: flex; align-items: flex-start; gap: 12px; padding: 14px; }
+  .feature .icon { font-size: 1.3rem; margin-bottom: 0; flex-shrink: 0; }
+  .feature h3 { margin-bottom: 2px; }
+
+  .card { padding: 18px 16px; border-radius: 10px; }
+  .tabs { gap: 6px; }
+  .tab { padding: 9px 10px; font-size: 0.82rem; }
+
+  .dropzone { padding: 28px 16px; }
+  .dropzone .dz-icon { font-size: 1.8rem; }
+
+  .so-row { grid-template-columns: 1fr; }
+
+  .btn-analyze { padding: 13px; font-size: 0.95rem; }
+  .log-box { height: 160px; font-size: 0.76rem; }
+}
+
+/* ── Responsive: Small phones ≤380px ── */
+@media (max-width: 380px) {
+  .hero h2 { font-size: 1.25rem; }
+  .header h1 { font-size: 1rem; }
+}
 </style>
 </head>
 <body>
@@ -59,30 +121,38 @@
   <div>⚡</div>
   <h1>Xflutter</h1>
   <span class="badge">Flutter RE Tool</span>
-  <a href="/history" style="margin-left:auto;color:#8b949e;text-decoration:none;font-size:0.82rem;border:1px solid #30363d;padding:5px 12px;border-radius:6px;">🕘 Riwayat</a>
+  <div class="header-right">
+    <a href="/history" class="header-link">🕘 Riwayat</a>
+  </div>
 </div>
 
 <div class="container">
   <div class="hero">
     <h2>Flutter App Reverse Engineering</h2>
-    <p>Upload your Flutter APK or <code>libapp.so</code> to extract classes, methods, strings,<br>API endpoints, secrets, and generate Frida hooks.</p>
+    <p>Upload Flutter APK atau <code>libapp.so</code> untuk ekstrak classes, methods, strings,<br>API endpoints, secrets, dan generate Frida hooks.</p>
   </div>
 
   <div class="features">
     <div class="feature">
       <div class="icon">🔍</div>
-      <h3>Static Scan</h3>
-      <p>Extract URLs, API keys, emails, JWT tokens & secrets directly from binary</p>
+      <div>
+        <h3>Static Scan</h3>
+        <p>Ekstrak URLs, API keys, emails, JWT tokens &amp; secrets langsung dari binary</p>
+      </div>
     </div>
     <div class="feature">
       <div class="icon">🏗️</div>
-      <h3>Full Decompile</h3>
-      <p>Rebuild Dart class hierarchy, method names, and assembly with symbols</p>
+      <div>
+        <h3>Full Decompile</h3>
+        <p>Rebuild hierarki class Dart, nama method, dan assembly dengan simbol</p>
+      </div>
     </div>
     <div class="feature">
       <div class="icon">🪝</div>
-      <h3>Frida Script</h3>
-      <p>Auto-generate Frida hooks for every class and method in the app</p>
+      <div>
+        <h3>Frida Script</h3>
+        <p>Auto-generate Frida hooks untuk setiap class dan method di app</p>
+      </div>
     </div>
   </div>
 
@@ -97,7 +167,7 @@
         <div class="dropzone" id="dz-apk">
           <input type="file" name="apk" id="apk-input" accept=".apk" onchange="handleFile(this, 'dz-apk')">
           <div class="dz-icon">📦</div>
-          <div class="dz-text">Drop your <strong>.apk</strong> file here or click to browse</div>
+          <div class="dz-text">Drop file <strong>.apk</strong> di sini atau klik untuk pilih</div>
           <div class="dz-filename" id="apk-fname"></div>
         </div>
       </div>
@@ -125,14 +195,14 @@
         </div>
       </div>
 
-      <button type="submit" class="btn-analyze" id="analyze-btn">🚀 Start Analysis</button>
+      <button type="submit" class="btn-analyze" id="analyze-btn">🚀 Mulai Analisis</button>
     </form>
 
     <div class="progress-section" id="progress-section">
-      <div class="status-label" id="status-label">Initializing...</div>
+      <div class="status-label" id="status-label">Memulai...</div>
       <div class="progress-bar-wrap"><div class="progress-bar" id="progress-bar"></div></div>
       <div class="log-box" id="log-box"></div>
-      <button class="view-results-btn" id="view-results-btn" onclick="viewResults()">📊 View Full Results</button>
+      <button class="view-results-btn" id="view-results-btn" onclick="viewResults()">📊 Lihat Hasil Lengkap</button>
     </div>
   </div>
 </div>
@@ -166,22 +236,21 @@ function handleFile(input, dzId) {
 
 document.getElementById('upload-form').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const form = e.target;
-  const fd = new FormData(form);
+  const fd = new FormData(e.target);
   fd.set('mode', currentMode);
 
   if (currentMode === 'apk' && !document.getElementById('apk-input').files.length) {
-    alert('Please select an APK file first.'); return;
+    alert('Pilih file APK terlebih dahulu.'); return;
   }
   if (currentMode === 'so' && (!document.getElementById('libapp-input').files.length || !document.getElementById('libflutter-input').files.length)) {
-    alert('Please select both libapp.so and libflutter.so.'); return;
+    alert('Pilih kedua file libapp.so dan libflutter.so.'); return;
   }
 
   document.getElementById('analyze-btn').disabled = true;
   document.getElementById('progress-section').classList.add('active');
   document.getElementById('log-box').innerHTML = '';
   document.getElementById('view-results-btn').style.display = 'none';
-  setProgress(5, 'Uploading files...');
+  setProgress(5, 'Mengupload file...');
 
   const resp = await fetch('/analyze', { method: 'POST', body: fd });
   const data = await resp.json();
@@ -197,13 +266,13 @@ function setProgress(pct, label) {
 }
 
 const STATUS_MAP = {
-  queued: [10, 'Queued...'],
-  scanning: [30, '🔍 Static scanning binary...'],
-  building: [55, '🔨 Building Blutter (may take a few minutes)...'],
-  parsing: [85, '📊 Parsing analysis output...'],
-  done: [100, '✅ Analysis complete!'],
-  partial: [100, '⚠️ Partial results (static scan only)'],
-  error: [100, '❌ Error during analysis'],
+  queued:   [10,  'Antrian...'],
+  scanning: [30,  '🔍 Static scan binary...'],
+  building: [55,  '🔨 Membangun Blutter (mungkin beberapa menit)...'],
+  parsing:  [85,  '📊 Menguraikan hasil...'],
+  done:     [100, '✅ Analisis selesai!'],
+  partial:  [100, '⚠️ Hasil parsial (static scan saja)'],
+  error:    [100, '❌ Error saat analisis'],
 };
 
 let lastLogLen = 0;
@@ -211,15 +280,13 @@ async function pollStatus() {
   if (!currentJobId) return;
   const resp = await fetch('/status/' + currentJobId);
   const data = await resp.json();
-
   const [pct, label] = STATUS_MAP[data.status] || [20, data.status];
   setProgress(pct, label);
 
-  const logBox = document.getElementById('log-box');
   const newLines = data.log.slice(lastLogLen);
   newLines.forEach(line => {
     lastLogLen++;
-    const cls = line.startsWith('✅') || line.startsWith('  Found') ? 'ok'
+    const cls = line.startsWith('✅') || line.startsWith('  ✔') ? 'ok'
               : line.startsWith('⚠️') ? 'warn'
               : line.startsWith('❌') ? 'err' : '';
     logLine(line, cls);
