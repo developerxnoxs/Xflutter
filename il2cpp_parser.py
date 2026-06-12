@@ -202,7 +202,9 @@ def _scan_string_pool(data: bytes, str_lit_data_off: int, str_lit_data_count: in
     while pos < region_end:
         end = data.find(b'\x00', pos, min(pos + 512, region_end))
         if end == -1:
-            break
+            # No null found in this 512-byte window — skip forward and keep scanning
+            pos += 512
+            continue
         slen = end - pos
         if slen >= 2:
             chunk = data[pos:end]
@@ -307,6 +309,37 @@ def _scan_secrets(data: bytes) -> dict:
     }
 
 
+def _scan_secrets_from_strings(string_literals: list) -> dict:
+    """
+    Scan individual parsed string literals for secrets.
+    This is more accurate for string literal sections where values are
+    stored without null-terminators (raw concatenated bytes).
+    """
+    urls, emails, gkeys, awskeys, jwts, firebase = set(), set(), set(), set(), set(), set()
+    for s in string_literals:
+        b = s.encode('utf-8', errors='replace')
+        for m in _URL_RE.findall(b):
+            urls.add(m.decode('utf-8', errors='replace'))
+        for m in _EMAIL_RE.findall(b):
+            emails.add(m.decode('utf-8', errors='replace'))
+        for m in _GKEY_RE.findall(b):
+            gkeys.add(m.decode('utf-8', errors='replace'))
+        for m in _AWSKEY_RE.findall(b):
+            awskeys.add(m.decode('utf-8', errors='replace'))
+        for m in _JWT_RE.findall(b):
+            jwts.add(m.decode('utf-8', errors='replace'))
+        for m in _FBASE_RE.findall(b):
+            firebase.add(m.decode('utf-8', errors='replace'))
+    return {
+        'urls':        sorted(urls),
+        'emails':      sorted(emails),
+        'google_keys': sorted(gkeys),
+        'aws_keys':    sorted(awskeys),
+        'jwt_tokens':  sorted(jwts),
+        'firebase':    sorted(firebase),
+    }
+
+
 # ────────────────────────────────────────────────────────────────────────────
 # Main entry point
 # ────────────────────────────────────────────────────────────────────────────
@@ -406,8 +439,30 @@ def parse_metadata_file(path: str) -> dict:
         result['classified'] = {}
 
     # Secrets scan
+    # 1. Scan individual parsed string literals (accurate — no concatenation artifacts)
+    # 2. Also scan the full binary for secrets embedded outside string-literal section
+    #    (covers the string pool, field names, etc.)
     try:
-        result['secrets'] = _scan_secrets(data)
+        sec_from_lits  = _scan_secrets_from_strings(result.get('string_literals', []))
+        sec_from_binary = _scan_secrets(data)
+
+        # Merge: prefer string-literal results, supplement with binary scan
+        def _merge(key):
+            a = set(sec_from_lits.get(key, []))
+            b = set(sec_from_binary.get(key, []))
+            # Binary scan may produce false concatenated matches; keep them only
+            # if they look like standalone values (no newlines, reasonable length)
+            filtered_b = {v for v in b if len(v) < 500 and '\n' not in v}
+            return sorted(a | filtered_b)
+
+        result['secrets'] = {
+            'urls':        _merge('urls'),
+            'emails':      _merge('emails'),
+            'google_keys': _merge('google_keys'),
+            'aws_keys':    _merge('aws_keys'),
+            'jwt_tokens':  _merge('jwt_tokens'),
+            'firebase':    _merge('firebase'),
+        }
         sec_total = (len(result['secrets'].get('google_keys', [])) +
                      len(result['secrets'].get('aws_keys', [])) +
                      len(result['secrets'].get('jwt_tokens', [])))
