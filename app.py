@@ -1,4 +1,5 @@
 import os
+import sys
 import uuid
 import threading
 import subprocess
@@ -82,7 +83,7 @@ def run_blutter_job(job_id: str, libapp_path: str, libflutter_path: str, lib_dir
         blutter_script = os.path.join(script_dir, 'blutter.py')
 
         proc = subprocess.Popen(
-            ['python3', blutter_script, '--nu', lib_dir, out_dir],
+            [sys.executable, blutter_script, '--nu', lib_dir, out_dir],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
