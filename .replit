@@ -1,4 +1,4 @@
-modules = ["nodejs-20", "bash", "python-3.12"]
+modules = ["nodejs-20", "bash", "python-3.11"]
 [agent]
 expertMode = true
 stack = "FLASK_VANILLA_JS"
@@ -28,7 +28,7 @@ outputType = "webview"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = ".venv/bin/gunicorn --bind 0.0.0.0:5000 --reuse-port --reload --timeout 300 main:app"
+args = "gunicorn --bind 0.0.0.0:5000 --reuse-port --reload --timeout 300 main:app"
 waitForPort = 5000
 
 [[ports]]
