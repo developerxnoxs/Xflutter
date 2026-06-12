@@ -9,6 +9,7 @@ from flask import Flask, render_template, request, jsonify, send_file, Response
 from static_scanner import scan_binary, parse_blutter_output, get_all_strings, get_asm_tree
 from extract_dart_info import extract_dart_info
 from db import init_db, save_job, load_all_jobs, delete_job
+from il2cpp_parser import parse_metadata_file, scan_libil2cpp
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500 MB
@@ -300,6 +301,153 @@ def download_file(job_id, filename):
     if not path or not os.path.isfile(path):
         return 'File tidak ditemukan', 404
     return send_file(path, as_attachment=True)
+
+
+# ─── IL2CPP Routes ────────────────────────────────────────────────────────────
+
+il2cpp_jobs = {}   # {job_id: {id, status, log, metadata, libil2cpp, ...}}
+
+UPLOAD_IL2CPP_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads_il2cpp')
+os.makedirs(UPLOAD_IL2CPP_DIR, exist_ok=True)
+
+
+def _il2cpp_log(job, msg):
+    job['log'].append(msg)
+
+
+def run_il2cpp_job(job_id: str, metadata_path: str, libil2cpp_path: str):
+    job = il2cpp_jobs[job_id]
+    try:
+        # Step 1: Parse global-metadata.dat
+        job['status'] = 'parsing'
+        _il2cpp_log(job, '📦 Mem-parse global-metadata.dat...')
+        meta = parse_metadata_file(metadata_path)
+
+        if meta.get('error'):
+            job['status'] = 'error'
+            job['error'] = meta['error']
+            _il2cpp_log(job, f'❌ {meta["error"]}')
+            return
+
+        job['metadata'] = meta
+        _il2cpp_log(job, f'  ✔ IL2CPP v{meta["version"]} — {meta.get("unity_hint","?")}')
+        stats = meta.get('stats', {})
+        _il2cpp_log(job, f'  ✔ Type definitions: {stats.get("type_def_count", 0)}')
+        _il2cpp_log(job, f'  ✔ Methods: {stats.get("method_count", 0)}')
+        _il2cpp_log(job, f'  ✔ Fields: {stats.get("field_count", 0)}')
+        _il2cpp_log(job, f'  ✔ String literals: {stats.get("string_literal_count", 0)}')
+
+        cls = meta.get('classified', {})
+        _il2cpp_log(job, f'  ✔ Game classes extracted: {len(cls.get("classes_game", []))}')
+        _il2cpp_log(job, f'  ✔ Assemblies: {len(cls.get("assemblies", []))}')
+
+        sec = meta.get('secrets', {})
+        total_sec = (len(sec.get('google_keys', [])) + len(sec.get('aws_keys', [])) +
+                     len(sec.get('jwt_tokens', [])))
+        if total_sec:
+            _il2cpp_log(job, f'  🚨 Secrets ditemukan: {total_sec}')
+
+        # Step 2: Scan libil2cpp.so if provided
+        if libil2cpp_path and os.path.isfile(libil2cpp_path):
+            job['status'] = 'scanning'
+            _il2cpp_log(job, '🔍 Static scan libil2cpp.so...')
+            lib_result = scan_libil2cpp(libil2cpp_path)
+            job['libil2cpp'] = lib_result
+            _il2cpp_log(job, f'  ✔ URLs: {len(lib_result.get("urls", []))}')
+            _il2cpp_log(job, f'  ✔ Strings: {len(lib_result.get("strings", []))}')
+        else:
+            job['libil2cpp'] = {}
+
+        job['status'] = 'done'
+        job['finished_at'] = datetime.utcnow().isoformat()
+        _il2cpp_log(job, '✅ Analisis IL2CPP selesai!')
+
+    except Exception as e:
+        import traceback
+        job['status'] = 'error'
+        job['error'] = str(e)
+        _il2cpp_log(job, f'❌ Error: {e}')
+        _il2cpp_log(job, traceback.format_exc())
+
+
+@app.route('/il2cpp/analyze', methods=['POST'])
+def il2cpp_analyze():
+    job_id  = 'il2_' + str(uuid.uuid4())[:8]
+    job_dir = os.path.join(UPLOAD_IL2CPP_DIR, job_id)
+    os.makedirs(job_dir, exist_ok=True)
+
+    metadata_file  = request.files.get('metadata')
+    libil2cpp_file = request.files.get('libil2cpp')
+
+    if not metadata_file or not metadata_file.filename:
+        return jsonify({'error': 'File global-metadata.dat diperlukan'}), 400
+
+    metadata_path  = os.path.join(job_dir, 'global-metadata.dat')
+    libil2cpp_path = ''
+    metadata_file.save(metadata_path)
+
+    if libil2cpp_file and libil2cpp_file.filename:
+        libil2cpp_path = os.path.join(job_dir, 'libil2cpp.so')
+        libil2cpp_file.save(libil2cpp_path)
+
+    il2cpp_jobs[job_id] = {
+        'id':          job_id,
+        'status':      'queued',
+        'log':         [],
+        'metadata':    {},
+        'libil2cpp':   {},
+        'created_at':  datetime.utcnow().isoformat(),
+        'finished_at': '',
+        'error':       '',
+    }
+
+    thread = threading.Thread(
+        target=run_il2cpp_job,
+        args=(job_id, metadata_path, libil2cpp_path),
+        daemon=True,
+    )
+    thread.start()
+    return jsonify({'job_id': job_id})
+
+
+@app.route('/il2cpp/status/<job_id>')
+def il2cpp_status(job_id):
+    job = il2cpp_jobs.get(job_id)
+    if not job:
+        return jsonify({'error': 'Job tidak ditemukan'}), 404
+    return jsonify({
+        'status': job['status'],
+        'log':    job.get('log', []),
+        'error':  job.get('error', ''),
+    })
+
+
+@app.route('/il2cpp/results/<job_id>')
+def il2cpp_results(job_id):
+    job = il2cpp_jobs.get(job_id)
+    if not job:
+        return render_template('error.html', message='Job IL2CPP tidak ditemukan'), 404
+    return render_template('il2cpp_results.html', job_id=job_id)
+
+
+@app.route('/il2cpp/data/<job_id>')
+def il2cpp_data(job_id):
+    job = il2cpp_jobs.get(job_id)
+    if not job:
+        return jsonify({'error': 'Job tidak ditemukan'}), 404
+
+    meta = dict(job.get('metadata', {}))
+    # Trim large lists for initial load (strings are paginated client-side)
+    # Keep first 500 string literals in initial payload
+    lits = meta.get('string_literals', [])
+    meta['string_literals'] = lits  # keep all — client paginates
+
+    return jsonify({
+        'status':    job['status'],
+        'log':       job.get('log', []),
+        'metadata':  meta,
+        'libil2cpp': job.get('libil2cpp', {}),
+    })
 
 
 @app.route('/job/<job_id>/delete', methods=['POST'])

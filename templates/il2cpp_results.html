@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Xflutter — IL2CPP Results</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #0d1117; color: #c9d1d9; font-family: 'Segoe UI', system-ui, sans-serif; min-height: 100vh; display: flex; flex-direction: column; }
+
+/* ── Header ── */
+.header { background: #161b22; border-bottom: 1px solid #30363d; padding: 11px 18px; display: flex; align-items: center; gap: 8px; flex-shrink: 0; z-index: 300; position: relative; }
+.header h1 { font-size: 1rem; font-weight: 700; color: #a371f7; }
+.il2cpp-badge { background: #a371f722; color: #a371f7; border: 1px solid #a371f755; border-radius: 20px; padding: 2px 9px; font-size: 0.76rem; font-family: monospace; white-space: nowrap; max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+.header-links { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+.header-links a { color: #8b949e; text-decoration: none; font-size: 0.8rem; border: 1px solid #30363d; padding: 4px 10px; border-radius: 6px; white-space: nowrap; transition: all 0.15s; }
+.header-links a:hover { color: #a371f7; border-color: #a371f7; }
+.hamburger { display: none; background: none; border: none; cursor: pointer; color: #8b949e; font-size: 1.3rem; padding: 4px 6px; border-radius: 6px; line-height: 1; flex-shrink: 0; }
+.hamburger:hover { color: #c9d1d9; background: #21262d; }
+
+/* ── Sidebar overlay ── */
+.sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 150; }
+
+/* ── Layout ── */
+.layout { display: flex; flex: 1; overflow: hidden; height: calc(100vh - 49px); }
+
+/* ── Sidebar ── */
+.sidebar { width: 210px; background: #161b22; border-right: 1px solid #30363d; padding: 10px 0; flex-shrink: 0; overflow-y: auto; transition: transform 0.25s ease; }
+.nav-sec { padding: 8px 14px 3px; font-size: 0.67rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #484f58; }
+.nav-item { display: flex; align-items: center; gap: 7px; padding: 8px 14px; cursor: pointer; font-size: 0.84rem; color: #8b949e; border-left: 2px solid transparent; transition: all 0.12s; user-select: none; }
+.nav-item:hover { color: #c9d1d9; background: #21262d; }
+.nav-item.active { color: #a371f7; border-left-color: #a371f7; background: #a371f70d; }
+.nav-badge { margin-left: auto; background: #21262d; color: #8b949e; border-radius: 10px; padding: 1px 6px; font-size: 0.71rem; min-width: 20px; text-align: center; }
+.nav-item.active .nav-badge { background: #a371f722; color: #a371f7; }
+
+/* ── Main ── */
+.main { flex: 1; overflow-y: auto; padding: 20px 24px; }
+.panel { display: none; }
+.panel.active { display: block; animation: fadeIn 0.15s ease; }
+@keyframes fadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:none; } }
+
+/* ── Typography & cards ── */
+h2 { font-size: 1.1rem; color: #e6edf3; margin-bottom: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.info-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(155px, 1fr)); gap: 10px; margin-bottom: 18px; }
+.info-card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 12px 14px; }
+.info-card .lbl { font-size: 0.7rem; color: #8b949e; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+.info-card .val { font-size: 1rem; font-weight: 700; color: #e6edf3; }
+.info-card .sub { font-size: 0.74rem; color: #a371f7; margin-top: 2px; }
+.stat-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.stat-pill { background: #161b22; border: 1px solid #30363d; border-radius: 20px; padding: 4px 12px; font-size: 0.79rem; color: #8b949e; }
+.stat-pill b { color: #a371f7; }
+.search-bar { width: 100%; background: #21262d; border: 1px solid #30363d; border-radius: 7px; padding: 7px 12px; color: #c9d1d9; font-size: 0.87rem; margin-bottom: 12px; outline: none; }
+.search-bar:focus { border-color: #a371f7; }
+
+/* ── Tables ── */
+.tbl-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.tbl { width: 100%; border-collapse: collapse; font-size: 0.83rem; min-width: 280px; }
+.tbl th { text-align: left; padding: 7px 10px; background: #161b22; color: #8b949e; font-weight: 600; font-size: 0.73rem; text-transform: uppercase; border-bottom: 1px solid #30363d; position: sticky; top: 0; z-index: 1; }
+.tbl td { padding: 6px 10px; border-bottom: 1px solid #21262d; color: #c9d1d9; word-break: break-all; vertical-align: top; }
+.tbl tr:hover td { background: #161b22; }
+
+/* ── Tags ── */
+.tag { display: inline-block; padding: 1px 7px; border-radius: 4px; font-size: 0.71rem; font-weight: 600; white-space: nowrap; }
+.t-url  { background: #1f6feb18; color: #58a6ff; border: 1px solid #1f6feb44; }
+.t-key  { background: #f8514918; color: #f85149; border: 1px solid #f8514944; }
+.t-email{ background: #3fb95018; color: #3fb950; border: 1px solid #3fb95044; }
+.t-jwt  { background: #d2992218; color: #d29922; border: 1px solid #d2992244; }
+.t-fb   { background: #f0883e18; color: #f0883e; border: 1px solid #f0883e44; }
+.t-cls  { background: #a371f718; color: #a371f7; border: 1px solid #a371f744; }
+.t-sys  { background: #58a6ff18; color: #58a6ff; border: 1px solid #58a6ff44; }
+.t-asm  { background: #3fb95018; color: #3fb950; border: 1px solid #3fb95044; }
+
+/* ── Class list ── */
+.cls-item { background: #161b22; border: 1px solid #30363d; border-radius: 7px; margin-bottom: 5px; overflow: hidden; }
+.cls-head { padding: 9px 12px; cursor: pointer; display: flex; align-items: center; gap: 8px; user-select: none; }
+.cls-head:hover { background: #21262d; }
+.cls-name { font-family: 'Courier New', monospace; font-weight: 600; color: #a371f7; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.85rem; }
+.cls-ns { font-size: 0.72rem; color: #8b949e; white-space: nowrap; flex-shrink: 0; font-family: monospace; }
+.cls-chev { color: #484f58; font-size: 0.8rem; transition: transform 0.15s; flex-shrink: 0; }
+.cls-chev.open { transform: rotate(180deg); }
+.cls-body { display: none; padding: 8px 12px 10px; border-top: 1px solid #30363d; font-size: 0.78rem; color: #8b949e; font-family: monospace; }
+.cls-body.open { display: block; }
+
+/* ── Namespace pills ── */
+.ns-grid { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+.ns-pill { background: #21262d; border: 1px solid #30363d; border-radius: 6px; padding: 4px 10px; font-size: 0.78rem; font-family: monospace; color: #8b949e; cursor: pointer; transition: all 0.12s; }
+.ns-pill:hover { color: #a371f7; border-color: #a371f7; }
+.ns-pill.active { background: #a371f718; color: #a371f7; border-color: #a371f744; }
+
+/* ── Misc ── */
+.empty { text-align: center; padding: 48px 24px; color: #484f58; }
+.empty .icon { font-size: 2.2rem; margin-bottom: 10px; }
+.alert { border-radius: 7px; padding: 10px 14px; margin-bottom: 14px; font-size: 0.84rem; line-height: 1.5; }
+.alert-warn { background: #d2992211; border: 1px solid #d2992244; color: #d29922; }
+.alert-ok   { background: #3fb95011; border: 1px solid #3fb95044; color: #3fb950; }
+.alert-err  { background: #f8514911; border: 1px solid #f8514944; color: #f85149; }
+.sec-title { font-size: 0.79rem; font-weight: 700; color: #484f58; text-transform: uppercase; letter-spacing: 0.07em; margin: 20px 0 8px; }
+.pg-bar { display: flex; align-items: center; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.pg-btn { background: #21262d; border: 1px solid #30363d; border-radius: 5px; padding: 6px 14px; color: #8b949e; cursor: pointer; font-size: 0.82rem; }
+.pg-btn:hover:not(:disabled) { color: #c9d1d9; border-color: #a371f7; }
+.pg-btn:disabled { opacity: 0.4; cursor: default; }
+.pg-info { color: #8b949e; font-size: 0.8rem; flex: 1; text-align: center; }
+.url-link { color: #58a6ff; word-break: break-all; }
+.url-link:hover { text-decoration: underline; }
+
+/* ── Responsive tablet ── */
+@media (max-width: 1024px) {
+  .sidebar { width: 185px; }
+  .nav-item { font-size: 0.81rem; padding: 7px 12px; }
+  .main { padding: 16px 18px; }
+}
+
+/* ── Responsive mobile ≤768px ── */
+@media (max-width: 768px) {
+  .header { padding: 10px 14px; gap: 6px; }
+  .header h1 { font-size: 0.95rem; }
+  .il2cpp-badge { display: none; }
+  .header-links a { font-size: 0.74rem; padding: 4px 8px; }
+  .hamburger { display: flex; align-items: center; order: -1; }
+  .layout { position: relative; overflow: hidden; }
+  .sidebar {
+    position: fixed; top: 0; left: 0; bottom: 0; z-index: 200;
+    width: 260px; transform: translateX(-100%);
+    box-shadow: 4px 0 24px rgba(0,0,0,0.5); padding-top: 52px;
+  }
+  .sidebar.open { transform: translateX(0); }
+  .sidebar-overlay.open { display: block; }
+  .main { padding: 14px 15px; }
+  .info-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .info-card { padding: 10px 12px; }
+}
+@media (max-width: 480px) {
+  .header-links a:not(:last-child) { display: none; }
+  .main { padding: 12px; }
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <button class="hamburger" id="hamburger" onclick="toggleSidebar()" aria-label="Menu">☰</button>
+  <div>🎮</div>
+  <h1>Xflutter — IL2CPP</h1>
+  <span class="il2cpp-badge" id="ver-badge">loading...</span>
+  <div class="header-links">
+    <a href="/history">🕘 Riwayat</a>
+    <a href="/">← Analisis Baru</a>
+  </div>
+</div>
+
+<div class="layout">
+  <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
+  <div class="sidebar" id="sidebar">
+    <div class="nav-sec">Overview</div>
+    <div class="nav-item active" data-panel="overview" onclick="showPanel('overview',this)">📋 Ringkasan</div>
+
+    <div class="nav-sec">Temuan</div>
+    <div class="nav-item" data-panel="secrets" onclick="showPanel('secrets',this)">🔑 Secrets &amp; Keys <span class="nav-badge" id="b-secrets">-</span></div>
+    <div class="nav-item" data-panel="urls" onclick="showPanel('urls',this)">🌐 URLs <span class="nav-badge" id="b-urls">-</span></div>
+    <div class="nav-item" data-panel="strings" onclick="showPanel('strings',this)">💬 String Literals <span class="nav-badge" id="b-strings">-</span></div>
+
+    <div class="nav-sec">Decompiled</div>
+    <div class="nav-item" data-panel="assemblies" onclick="showPanel('assemblies',this)">📦 Assemblies <span class="nav-badge" id="b-asm">-</span></div>
+    <div class="nav-item" data-panel="classes" onclick="showPanel('classes',this)">🏗️ Game Classes <span class="nav-badge" id="b-cls">-</span></div>
+    <div class="nav-item" data-panel="sysclasses" onclick="showPanel('sysclasses',this)">⚙️ System Classes <span class="nav-badge" id="b-syscls">-</span></div>
+    <div class="nav-item" data-panel="methods" onclick="showPanel('methods',this)">🔧 Methods <span class="nav-badge" id="b-meth">-</span></div>
+  </div>
+
+  <div class="main" id="main">
+    <div id="panel-overview" class="panel active">
+      <div style="color:#8b949e;padding:24px 0">⏳ Memuat data hasil analisis IL2CPP...</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const JOB_ID = {{ job_id | tojson }};
+let DATA = null;
+
+function toggleSidebar() {
+  const s = document.getElementById('sidebar');
+  const o = document.getElementById('sidebar-overlay');
+  const open = s.classList.toggle('open');
+  o.classList.toggle('open', open);
+}
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebar-overlay').classList.remove('open');
+}
+
+async function loadData() {
+  try {
+    const r = await fetch('/il2cpp/data/' + JOB_ID);
+    DATA = await r.json();
+    buildAll();
+  } catch(e) {
+    document.getElementById('panel-overview').innerHTML =
+      `<div class="alert alert-err">❌ Gagal memuat data: ${e.message}</div>`;
+  }
+}
+
+function showPanel(name, el) {
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  el.classList.add('active');
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  const p = document.getElementById('panel-' + name);
+  if (p) p.classList.add('active');
+  if (window.innerWidth <= 768) closeSidebar();
+}
+
+function getOrMakePanel(id) {
+  let p = document.getElementById('panel-' + id);
+  if (!p) {
+    p = document.createElement('div');
+    p.id = 'panel-' + id;
+    p.className = 'panel';
+    document.getElementById('main').appendChild(p);
+  }
+  return p;
+}
+
+function setB(id, val, color) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = val;
+  if (color) el.style.color = color;
+}
+
+function buildAll() {
+  const meta = DATA.metadata || {};
+  const lib  = DATA.libil2cpp || {};
+  const stats = meta.stats || {};
+  const cls   = meta.classified || {};
+  const sec   = meta.secrets || {};
+
+  // Header badge
+  const ver = meta.version;
+  const hint = meta.unity_hint || '';
+  document.getElementById('ver-badge').textContent =
+    ver ? `IL2CPP v${ver} · ${hint}` : 'Unknown version';
+
+  // Nav badges
+  const secCount = (sec.google_keys||[]).length + (sec.aws_keys||[]).length + (sec.jwt_tokens||[]).length;
+  setB('b-secrets', secCount, secCount > 0 ? '#f85149' : null);
+  setB('b-urls',   (sec.urls||[]).length);
+  setB('b-strings', stats.string_literal_count || 0);
+  setB('b-asm',    (cls.assemblies||[]).length);
+  setB('b-cls',    (cls.classes_game||[]).length);
+  setB('b-syscls', (cls.classes_system||[]).length);
+  setB('b-meth',   (cls.methods||[]).length);
+
+  buildOverview(meta, lib, stats, cls, sec);
+  buildSecrets(sec, lib);
+  buildUrls(sec, lib);
+  buildStrings(meta);
+  buildAssemblies(cls);
+  buildClasses(cls);
+  buildSysClasses(cls);
+  buildMethods(cls);
+}
+
+// ── Overview ──────────────────────────────────────────────────────────────
+function buildOverview(meta, lib, stats, cls, sec) {
+  const p = getOrMakePanel('overview');
+  const err = meta.error;
+  const alertHtml = err
+    ? `<div class="alert alert-err">❌ ${esc(err)}</div>`
+    : `<div class="alert alert-ok">✅ global-metadata.dat berhasil diparse — IL2CPP v${meta.version||'?'} (${esc(meta.unity_hint||'')})</div>`;
+
+  const secCount = (sec.google_keys||[]).length + (sec.aws_keys||[]).length +
+                   (sec.jwt_tokens||[]).length + (lib.google_keys||[]).length +
+                   (lib.aws_keys||[]).length;
+
+  p.innerHTML = alertHtml + `
+    <h2>📋 Ringkasan IL2CPP</h2>
+    <div class="info-grid">
+      <div class="info-card"><div class="lbl">IL2CPP Version</div><div class="val">${esc(String(meta.version||'N/A'))}</div><div class="sub">${esc(meta.unity_hint||'')}</div></div>
+      <div class="info-card"><div class="lbl">Type Definitions</div><div class="val">${stats.type_def_count||'-'}</div></div>
+      <div class="info-card"><div class="lbl">Methods</div><div class="val">${stats.method_count||'-'}</div></div>
+      <div class="info-card"><div class="lbl">Fields</div><div class="val">${stats.field_count||'-'}</div></div>
+      <div class="info-card"><div class="lbl">Assemblies</div><div class="val">${stats.assembly_count||'-'}</div></div>
+      <div class="info-card"><div class="lbl">Secrets</div><div class="val" style="color:${secCount?'#f85149':'#3fb950'}">${secCount}</div><div class="sub">${secCount?'⚠️ Perlu diperiksa!':'✅ Tidak ada'}</div></div>
+    </div>
+    <div class="sec-title">Statistik Extraction</div>
+    <div class="stat-row">
+      <div class="stat-pill">Game classes: <b>${(cls.classes_game||[]).length}</b></div>
+      <div class="stat-pill">System classes: <b>${(cls.classes_system||[]).length}</b></div>
+      <div class="stat-pill">Methods: <b>${(cls.methods||[]).length}</b></div>
+      <div class="stat-pill">String literals: <b>${stats.string_literal_count||0}</b></div>
+      <div class="stat-pill">URLs: <b>${(sec.urls||[]).length}</b></div>
+      <div class="stat-pill">File size: <b>${_fmtBytes(meta.file_size||0)}</b></div>
+    </div>
+    ${(cls.namespaces_game||[]).length > 0 ? `
+    <div class="sec-title">Game Namespaces (${(cls.namespaces_game||[]).length})</div>
+    <div class="ns-grid">${(cls.namespaces_game||[]).map(n=>`<span class="ns-pill">${esc(n)}</span>`).join('')}</div>` : ''}
+  `;
+}
+
+// ── Secrets ───────────────────────────────────────────────────────────────
+function buildSecrets(sec, lib) {
+  const p = getOrMakePanel('secrets');
+  const rows = [];
+  const add = (type, cls, arr) => (arr||[]).forEach(v => rows.push([type, cls, v, 'metadata']));
+  const addL = (type, cls, arr) => (arr||[]).forEach(v => rows.push([type, cls, v, 'libil2cpp.so']));
+
+  add('Google API Key', 'key', sec.google_keys);
+  add('AWS Access Key', 'key', sec.aws_keys);
+  add('JWT Token', 'jwt', sec.jwt_tokens);
+  add('Firebase', 'fb', sec.firebase);
+  add('Email', 'email', sec.emails);
+  addL('Google API Key', 'key', lib.google_keys);
+  addL('AWS Access Key', 'key', lib.aws_keys);
+  addL('JWT Token', 'jwt', lib.jwt_tokens);
+  addL('Firebase', 'fb', lib.firebase);
+
+  if (!rows.length) {
+    p.innerHTML = `<h2>🔑 Secrets &amp; Sensitive Data</h2><div class="empty"><div class="icon">✅</div>Tidak ada secrets yang terdeteksi</div>`;
+    return;
+  }
+  p.innerHTML = `<h2>🔑 Secrets &amp; Sensitive Data</h2>
+    <input class="search-bar" placeholder="Cari..." oninput="filterTbl(this,'tbl-sec')">
+    <div class="tbl-wrap"><table class="tbl" id="tbl-sec">
+      <thead><tr><th>Tipe</th><th>Nilai</th><th>Sumber</th></tr></thead>
+      <tbody>${rows.map(([t,cls,v,src])=>`<tr>
+        <td><span class="tag t-${cls}">${esc(t)}</span></td>
+        <td><code style="font-size:0.78rem">${esc(v)}</code></td>
+        <td style="color:#484f58;font-size:0.74rem;white-space:nowrap">${esc(src)}</td>
+      </tr>`).join('')}</tbody>
+    </table></div>`;
+}
+
+// ── URLs ──────────────────────────────────────────────────────────────────
+function buildUrls(sec, lib) {
+  const p = getOrMakePanel('urls');
+  const combined = [...new Set([...(sec.urls||[]), ...(lib.urls||[])])].sort();
+  if (!combined.length) {
+    p.innerHTML = `<h2>🌐 URLs &amp; Endpoints</h2><div class="empty"><div class="icon">🌐</div>Tidak ada URL ditemukan</div>`;
+    return;
+  }
+  p.innerHTML = `<h2>🌐 URLs &amp; Endpoints — ${combined.length}</h2>
+    <input class="search-bar" placeholder="Cari URL..." oninput="filterTbl(this,'tbl-urls')">
+    <div class="tbl-wrap"><table class="tbl" id="tbl-urls">
+      <thead><tr><th>#</th><th>URL</th></tr></thead>
+      <tbody>${combined.map((u,i)=>`<tr>
+        <td style="color:#484f58;width:36px">${i+1}</td>
+        <td><a class="url-link" href="${esc(u)}" target="_blank" rel="noopener">${esc(u)}</a></td>
+      </tr>`).join('')}</tbody>
+    </table></div>`;
+}
+
+// ── String Literals ───────────────────────────────────────────────────────
+let strPage = 0, strQuery = '', strFiltered = [];
+function buildStrings(meta) {
+  const p = getOrMakePanel('strings');
+  const all = meta.string_literals || [];
+  strFiltered = all;
+  p.innerHTML = `<h2>💬 String Literals — ${all.length}</h2>
+    <div class="stat-row"><div class="stat-pill">Total: <b>${all.length}</b></div></div>
+    <input class="search-bar" placeholder="Cari string..." id="str-search" oninput="onStrSearch(this.value)">
+    <div id="str-container"></div>
+    <div class="pg-bar" id="str-pg">
+      <button class="pg-btn" id="str-prev" onclick="renderStrPage(strPage-1)">← Sebelumnya</button>
+      <span class="pg-info" id="str-info"></span>
+      <button class="pg-btn" id="str-next" onclick="renderStrPage(strPage+1)">Berikutnya →</button>
+    </div>`;
+  renderStrPage(0);
+}
+
+function renderStrPage(page) {
+  const PER = 300;
+  const total = strFiltered.length;
+  const pages = Math.max(1, Math.ceil(total / PER));
+  page = Math.max(0, Math.min(page, pages - 1));
+  strPage = page;
+  const slice = strFiltered.slice(page * PER, (page + 1) * PER);
+  const container = document.getElementById('str-container');
+  if (!container) return;
+  if (!slice.length) {
+    container.innerHTML = '<div class="empty" style="padding:24px"><div class="icon">💬</div>Tidak ada string</div>';
+  } else {
+    container.innerHTML = `<div class="tbl-wrap"><table class="tbl">
+      <thead><tr><th>#</th><th>String</th></tr></thead>
+      <tbody>${slice.map((s,i)=>`<tr>
+        <td style="color:#484f58;width:42px">${page*PER+i+1}</td>
+        <td><code style="font-size:0.77rem">${esc(s)}</code></td>
+      </tr>`).join('')}</tbody>
+    </table></div>`;
+  }
+  document.getElementById('str-info').textContent = `Hal. ${page+1} / ${pages} (${total} total)`;
+  document.getElementById('str-prev').disabled = page === 0;
+  document.getElementById('str-next').disabled = page >= pages - 1;
+}
+
+let strTimer;
+function onStrSearch(val) {
+  strQuery = val.toLowerCase();
+  clearTimeout(strTimer);
+  strTimer = setTimeout(() => {
+    const all = (DATA.metadata || {}).string_literals || [];
+    strFiltered = strQuery ? all.filter(s => s.toLowerCase().includes(strQuery)) : all;
+    renderStrPage(0);
+  }, 350);
+}
+
+// ── Assemblies ────────────────────────────────────────────────────────────
+function buildAssemblies(cls) {
+  const p = getOrMakePanel('assemblies');
+  const asm = cls.assemblies || [];
+  if (!asm.length) {
+    p.innerHTML = `<h2>📦 Assemblies</h2><div class="empty"><div class="icon">📦</div>Tidak ada assembly terdeteksi</div>`;
+    return;
+  }
+  p.innerHTML = `<h2>📦 Assemblies — ${asm.length}</h2>
+    <div class="tbl-wrap"><table class="tbl">
+      <thead><tr><th>#</th><th>Assembly</th></tr></thead>
+      <tbody>${asm.map((a,i)=>`<tr>
+        <td style="color:#484f58;width:36px">${i+1}</td>
+        <td><span class="tag t-asm">dll</span> <code style="font-size:0.79rem">${esc(a)}</code></td>
+      </tr>`).join('')}</tbody>
+    </table></div>`;
+}
+
+// ── Game Classes ──────────────────────────────────────────────────────────
+function buildClasses(cls) {
+  const p = getOrMakePanel('classes');
+  _buildClassPanel(p, cls.classes_game || [], 'Game Classes', 'cls_game', '#a371f7');
+}
+function buildSysClasses(cls) {
+  const p = getOrMakePanel('sysclasses');
+  _buildClassPanel(p, cls.classes_system || [], 'System Classes', 'cls_sys', '#58a6ff');
+}
+
+function _buildClassPanel(p, list, title, idPrefix, color) {
+  if (!list.length) {
+    p.innerHTML = `<h2>🏗️ ${title}</h2><div class="empty"><div class="icon">🏗️</div>Tidak ada class terdeteksi</div>`;
+    return;
+  }
+  p.innerHTML = `<h2>🏗️ ${title} — ${list.length}</h2>
+    <input class="search-bar" placeholder="Cari class..." oninput="filterTbl(this,'${idPrefix}-tbl')">
+    <div class="tbl-wrap"><table class="tbl" id="${idPrefix}-tbl">
+      <thead><tr><th>#</th><th>Class</th><th>Namespace</th></tr></thead>
+      <tbody>${list.map((c,i) => {
+        const dot = c.lastIndexOf('.');
+        const ns  = dot > 0 ? c.slice(0, dot) : '';
+        const nm  = dot > 0 ? c.slice(dot+1)  : c;
+        return `<tr>
+          <td style="color:#484f58;width:36px">${i+1}</td>
+          <td><code style="font-size:0.79rem;color:${color}">${esc(nm)}</code></td>
+          <td style="color:#8b949e;font-size:0.77rem;font-family:monospace">${esc(ns)}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table></div>`;
+}
+
+// ── Methods ───────────────────────────────────────────────────────────────
+function buildMethods(cls) {
+  const p = getOrMakePanel('methods');
+  const methods = cls.methods || [];
+  if (!methods.length) {
+    p.innerHTML = `<h2>🔧 Methods</h2><div class="empty"><div class="icon">🔧</div>Tidak ada method terdeteksi</div>`;
+    return;
+  }
+  p.innerHTML = `<h2>🔧 Methods — ${methods.length}</h2>
+    <input class="search-bar" placeholder="Cari method..." oninput="filterTbl(this,'meth-tbl')">
+    <div class="tbl-wrap"><table class="tbl" id="meth-tbl">
+      <thead><tr><th>#</th><th>Method Name</th></tr></thead>
+      <tbody>${methods.map((m,i)=>`<tr>
+        <td style="color:#484f58;width:36px">${i+1}</td>
+        <td><code style="font-size:0.79rem">${esc(m)}</code></td>
+      </tr>`).join('')}</tbody>
+    </table></div>`;
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+function filterTbl(input, id) {
+  const q = input.value.toLowerCase();
+  document.querySelectorAll('#' + id + ' tbody tr').forEach(row => {
+    row.style.display = row.textContent.toLowerCase().includes(q) ? '' : 'none';
+  });
+}
+
+function _fmtBytes(b) {
+  if (b < 1024) return b + ' B';
+  if (b < 1048576) return (b/1024).toFixed(1) + ' KB';
+  return (b/1048576).toFixed(1) + ' MB';
+}
+
+function esc(s) {
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+loadData();
+</script>
+</body>
+</html>
