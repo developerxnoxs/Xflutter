@@ -183,6 +183,32 @@ def cmake_blutter(input: BlutterInput):
             )
             clang_file = os.path.join(llvm_path, "bin", "clang")
             my_env = {**os.environ, "CC": clang_file, "CXX": clang_file + "++"}
+    else:
+        # On Linux/NixOS: the pkg-config wrapper replaces PKG_CONFIG_PATH with
+        # PKG_CONFIG_PATH_x86_64_unknown_linux_gnu, so we must set that variable.
+        # Detect all pkgconfig dirs from CMAKE_LIBRARY_PATH / REPLIT_LD_LIBRARY_PATH
+        # so cmake's FindPkgConfig can locate capstone and other nix deps.
+        my_env = dict(os.environ)
+        extra_pkgconfig = []
+        for env_var in ("CMAKE_LIBRARY_PATH", "REPLIT_LD_LIBRARY_PATH", "NIX_LDFLAGS_FOR_TARGET"):
+            val = os.environ.get(env_var, "")
+            # NIX_LDFLAGS_FOR_TARGET uses "-L/path" tokens
+            if env_var == "NIX_LDFLAGS_FOR_TARGET":
+                parts = [p[2:] for p in val.split() if p.startswith("-L")]
+            else:
+                parts = [p for p in val.split(":") if p]
+            for lib_dir in parts:
+                pc_dir = os.path.join(lib_dir, "pkgconfig")
+                if os.path.isdir(pc_dir) and pc_dir not in extra_pkgconfig:
+                    extra_pkgconfig.append(pc_dir)
+        if extra_pkgconfig:
+            # Set both the plain and the NixOS arch-specific variable so that
+            # the pkg-config wrapper (which overrides the plain one) also works.
+            for key in ("PKG_CONFIG_PATH", "PKG_CONFIG_PATH_x86_64_unknown_linux_gnu"):
+                existing = my_env.get(key, "")
+                existing_parts = [p for p in existing.split(":") if p]
+                merged = extra_pkgconfig + [p for p in existing_parts if p not in extra_pkgconfig]
+                my_env[key] = ":".join(merged)
     # cmake -GNinja -Bbuild -DCMAKE_BUILD_TYPE=Release
     subprocess.run(
         [

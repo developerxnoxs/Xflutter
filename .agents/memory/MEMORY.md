@@ -1,0 +1,1 @@
+- [NixOS pkg-config for cmake](nixos-pkgconfig-cmake.md) — NixOS pkg-config wrapper ignores PKG_CONFIG_PATH; must set PKG_CONFIG_PATH_x86_64_unknown_linux_gnu instead.

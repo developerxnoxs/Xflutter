@@ -1,0 +1,42 @@
+talling: /home/runner/workspace/dartsdk/v3.8.1/../../packages/include/dartvm3.8.1/vm/thread_stack_resource.h
+-- Installing: /home/runner/workspace/dartsdk/v3.8.1/../../packages/include/dartvm3.8.1/vm/thread_state.h
+-- Installing: /home/runner/workspace/dartsdk/v3.8.1/../../packages/include/dartvm3.8.1/vm/timeline.h
+-- Installing: /home/runner/workspace/dartsdk/v3.8.1/../../packages/include/dartvm3.8.1/vm/timer.h
+-- Installing: /home/runner/workspace/dartsdk/v3.8.1/../../packages/include/dartvm3.8.1/vm/token.h
+-- Installing: /home/runner/workspace/dartsdk/v3.8.1/../../packages/include/dartvm3.8.1/vm/token_position.h
+-- Installing: /home/runner/workspace/dartsdk/v3.8.1/../../packages/include/dartvm3.8.1/vm/type_testing_stubs.h
+-- Installing: /home/runner/workspace/dartsdk/v3.8.1/../../packages/include/dartvm3.8.1/vm/unit_test.h
+-- Installing: /home/runner/workspace/dartsdk/v3.8.1/../../packages/include/dartvm3.8.1/vm/unwinding_records.h
+-- Installing: /home/runner/workspace/dartsdk/v3.8.1/../../packages/include/dartvm3.8.1/vm/v8_snapshot_writer.h
+-- Installing: /home/runner/workspace/dartsdk/v3.8.1/../../packages/include/dartvm3.8.1/vm/version.h
+-- Installing: /home/runner/workspace/dartsdk/v3.8.1/../../packages/include/dartvm3.8.1/vm/virtual_memory.h
+-- Installing: /home/runner/workspace/dartsdk/v3.8.1/../../packages/include/dartvm3.8.1/vm/virtual_memory_compressed.h
+-- Installing: /home/runner/workspace/dartsdk/v3.8.1/../../packages/include/dartvm3.8.1/vm/visitor.h
+-- Installing: /home/runner/workspace/dartsdk/v3.8.1/../../packages/include/dartvm3.8.1/vm/zone.h
+-- Installing: /home/runner/workspace/dartsdk/v3.8.1/../../packages/include/dartvm3.8.1/vm/zone_text_buffer.h
+-- Installing: /home/runner/workspace/dartsdk/v3.8.1/../../packages/lib/cmake/dartvm3.8.1_android_arm64/dartvmTarget.cmake
+-- Installing: /home/runner/workspace/dartsdk/v3.8.1/../../packages/lib/cmake/dartvm3.8.1_android_arm64/dartvmTarget-release.cmake
+-- Installing: /home/runner/workspace/dartsdk/v3.8.1/../../packages/lib/cmake/dartvm3.8.1_android_arm64/dartvm3.8.1_android_arm64Config.cmake
+-- Installing: /home/runner/workspace/dartsdk/v3.8.1/../../packages/lib/cmake/dartvm3.8.1_android_arm64/dartvm3.8.1_android_arm64ConfigVersion.cmake
+CMake Error at /nix/store/29ax4k0a83zhz43lb73cv610d95wdsx1-cmake-3.31.6/share/cmake-3.31/Modules/FindPkgConfig.cmake:938 (message):
+None of the required 'capstone' found
+Call Stack (most recent call first):
+CMakeLists.txt:30 (pkg_search_module)
+-- Configuring incomplete, errors occurred!
+Dart version: 3.8.1, Snapshot: 830f4f59e7969c70b595182826435c19, Target: android arm64
+flags: product no-code_comments no-dwarf_stack_traces_mode dedup_instructions no-tsan no-msan arm64 android compressed-pointers
+Traceback (most recent call last):
+File "/home/runner/workspace/blutter.py", line 455, in <module>
+main(
+File "/home/runner/workspace/blutter.py", line 364, in main
+main2(
+File "/home/runner/workspace/blutter.py", line 338, in main2
+build_and_run(input)
+File "/home/runner/workspace/blutter.py", line 284, in build_and_run
+cmake_blutter(input)
+File "/home/runner/workspace/blutter.py", line 187, in cmake_blutter
+subprocess.run(
+File "/nix/store/6334pjf6w2q623rgvwi499qaiym1p6yv-python3-3.11.14/lib/python3.11/subprocess.py", line 571, in run
+raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['cmake', '-GNinja', '-B', '/home/runner/workspace/build/blutter_dartvm3.8.1_android_arm64', '-DDARTLIB=dartvm3.8.1_android_arm64', '-DNAME_SUFFIX=', '-DCMAKE_BUILD_TYPE=Release', '--log-level=NOTICE', '-DHAS_RECORD_TYPE=1', '-DNO_METHOD_EXTRACTOR_STUB=1', '-DUNIFORM_INTEGER_ACCESS=1', '-DOLD_MARKING_STACK_BLOCK=1']' returned non-zero exit status 1.
+⚠️ Blutter gagal — menampilkan hasil static scan saja
