@@ -6,7 +6,7 @@ import zipfile
 from datetime import datetime
 from flask import Flask, render_template, request, jsonify, send_file, Response
 
-from static_scanner import scan_binary, parse_blutter_output, get_all_strings, get_asm_tree, pseudocode_from_asm_content
+from static_scanner import scan_binary, parse_blutter_output, get_all_strings, get_asm_tree, pseudocode_from_asm_content, search_pseudocode
 from extract_dart_info import extract_dart_info
 from db import init_db, save_job, load_all_jobs, delete_job
 from il2cpp_parser import parse_metadata_file, scan_libil2cpp
@@ -304,6 +304,23 @@ def asm_file(job_id, filepath):
     if not os.path.isfile(full_path):
         return 'File tidak ditemukan', 404
     return send_file(full_path, mimetype='text/plain')
+
+
+@app.route('/results/<job_id>/pseudocode/search')
+def pseudocode_search(job_id):
+    """Search pseudo code across all ASM files."""
+    job = _get_job_or_fs(job_id)
+    if not job:
+        return jsonify({'error': 'Job tidak ditemukan'}), 404
+    query = request.args.get('q', '').strip()
+    if not query:
+        return jsonify({'results': [], 'query': ''})
+    limit = min(int(request.args.get('limit', 30)), 60)
+    try:
+        results = search_pseudocode(job['out_dir'], query, limit=limit)
+        return jsonify({'results': results, 'query': query, 'count': len(results)})
+    except Exception as e:
+        return jsonify({'error': str(e), 'results': []}), 500
 
 
 @app.route('/results/<job_id>/pseudocode/<path:filepath>')

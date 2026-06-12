@@ -534,6 +534,134 @@ def pseudocode_from_asm_content(content: str, filename: str = '') -> str:
     return result.strip()
 
 
+def _extract_method_block(lines: list, start_idx: int) -> list:
+    """Extract all lines of a method block starting from its declaration line."""
+    block = [lines[start_idx]]
+    depth = lines[start_idx].count('{') - lines[start_idx].count('}')
+    i = start_idx + 1
+    while i < len(lines) and (depth > 0 or i == start_idx + 1):
+        line = lines[i]
+        block.append(line)
+        depth += line.count('{') - line.count('}')
+        if depth <= 0:
+            break
+        i += 1
+    return block
+
+
+def search_pseudocode(outdir: str, query: str, limit: int = 30) -> list:
+    """
+    Search all ASM files for query, return matching results with pseudo code context.
+    Searches raw text first for speed, generates pseudo code only for matches.
+    Returns list of {package, file, key, class_name, method_name, pseudo_snippet, match_count}.
+    """
+    if not query or len(query) < 2:
+        return []
+
+    asm_dir = os.path.join(outdir, 'asm')
+    if not os.path.isdir(asm_dir):
+        return []
+
+    results = []
+    query_lower = query.lower()
+
+    # Walk all ASM files
+    for pkg_name in sorted(os.listdir(asm_dir)):
+        if len(results) >= limit:
+            break
+        pkg_dir = os.path.join(asm_dir, pkg_name)
+        if not os.path.isdir(pkg_dir):
+            continue
+        for fname in sorted(os.listdir(pkg_dir)):
+            if len(results) >= limit:
+                break
+            fpath = os.path.join(pkg_dir, fname)
+            if not os.path.isfile(fpath):
+                continue
+            try:
+                with open(fpath, 'r', errors='replace') as f:
+                    content = f.read()
+            except Exception:
+                continue
+
+            # Fast pre-filter: skip files that don't contain the query
+            if query_lower not in content.lower():
+                continue
+
+            # Parse the file to find matching methods
+            file_lines = content.splitlines()
+            current_class = None
+            i = 0
+            file_results = []
+            while i < len(file_lines):
+                line = file_lines[i]
+
+                # Track class declarations
+                cls_m = re.match(r'^class\s+([\w$<>,? ]+)', line)
+                if cls_m:
+                    current_class = cls_m.group(1).strip()
+                    i += 1
+                    continue
+
+                # Method declaration
+                method_m = re.match(
+                    r'^  ((?:static\s+)?(?:\[closure\]\s+)?[\w$<>,? *]+)\s+([\w$<>.,? ]+)\((.*)$',
+                    line
+                )
+                if method_m:
+                    method_name = method_m.group(2).strip()
+                    # Extract the method block
+                    block_lines = _extract_method_block(file_lines, i)
+                    block_text = '\n'.join(block_lines)
+
+                    # Check if query appears in this method block
+                    if query_lower in block_text.lower():
+                        # Generate pseudo code for just this block
+                        try:
+                            pseudo = pseudocode_from_asm_content(block_text, '')
+                        except Exception:
+                            pseudo = block_text[:500]
+
+                        # Count matches
+                        match_count = block_text.lower().count(query_lower)
+
+                        # Extract snippet: lines near the match
+                        pseudo_lines = pseudo.splitlines()
+                        snippet_lines = []
+                        for j, pl in enumerate(pseudo_lines):
+                            if query_lower in pl.lower():
+                                start = max(0, j - 2)
+                                end = min(len(pseudo_lines), j + 3)
+                                snippet_lines.extend(pseudo_lines[start:end])
+                                if len(snippet_lines) > 20:
+                                    break
+                        snippet = '\n'.join(dict.fromkeys(snippet_lines))  # dedupe order-preserving
+
+                        file_results.append({
+                            'package': pkg_name,
+                            'file': fname,
+                            'key': f'{pkg_name}/{fname}',
+                            'class_name': current_class or '(unknown)',
+                            'method_name': method_name,
+                            'pseudo_snippet': snippet[:800],
+                            'full_pseudo': pseudo[:3000],
+                            'match_count': match_count,
+                        })
+
+                    i += len(block_lines)
+                    continue
+
+                i += 1
+
+            # Sort by match count descending, take top 3 per file
+            file_results.sort(key=lambda x: x['match_count'], reverse=True)
+            results.extend(file_results[:3])
+
+    # Global sort: most matches first
+    results.sort(key=lambda x: x['match_count'], reverse=True)
+    return results[:limit]
+
+
 def get_asm_tree(outdir: str) -> list:
     """Return asm file tree as [{package, file, path_key}]."""
     asm_dir = os.path.join(outdir, 'asm')
