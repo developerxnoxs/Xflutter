@@ -109,6 +109,33 @@ h2 { font-size: 1.1rem; color: #e6edf3; margin-bottom: 14px; font-weight: 600; d
 .asm-viewer pre { padding: 14px; font-family: 'Courier New', monospace; font-size: 0.78rem; line-height: 1.65; color: #c9d1d9; white-space: pre; }
 .asm-placeholder { display: flex; align-items: center; justify-content: center; height: 100%; color: #484f58; font-size: 0.88rem; padding: 24px; text-align: center; }
 
+/* ── Pseudo Code ── */
+.pseudo-layout { display: grid; grid-template-columns: 240px 1fr; gap: 12px; height: calc(100vh - 130px); }
+.pseudo-viewer { background: #0d1117; border: 1px solid #30363d; border-radius: 8px; overflow: auto; -webkit-overflow-scrolling: touch; display: flex; flex-direction: column; }
+.pseudo-toolbar { background: #161b22; border-bottom: 1px solid #30363d; padding: 8px 12px; display: flex; align-items: center; gap: 8px; flex-shrink: 0; flex-wrap: wrap; }
+.pseudo-toolbar .view-toggle { display: flex; border: 1px solid #30363d; border-radius: 6px; overflow: hidden; }
+.pseudo-toolbar .vt-btn { background: #21262d; border: none; color: #8b949e; padding: 4px 12px; font-size: 0.76rem; cursor: pointer; transition: all 0.12s; }
+.pseudo-toolbar .vt-btn:hover { color: #c9d1d9; }
+.pseudo-toolbar .vt-btn.active { background: #1f6feb; color: #fff; }
+.pseudo-toolbar .copy-btn { background: #30363d; border: none; color: #8b949e; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 0.74rem; }
+.pseudo-toolbar .copy-btn:hover { color: #c9d1d9; background: #484f58; }
+.pseudo-toolbar .filename { font-family: monospace; font-size: 0.77rem; color: #bc8cff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+.pseudo-code-body { flex: 1; overflow: auto; padding: 14px; }
+.pseudo-code-body pre { font-family: 'Courier New', monospace; font-size: 0.78rem; line-height: 1.7; color: #c9d1d9; white-space: pre; }
+/* Syntax highlight pseudo code */
+.pseudo-kw   { color: #ff7b72; }
+.pseudo-type { color: #ffa657; }
+.pseudo-fn   { color: #d2a8ff; }
+.pseudo-str  { color: #a5d6ff; }
+.pseudo-cmt  { color: #6e7681; font-style: italic; }
+.pseudo-num  { color: #79c0ff; }
+.pseudo-addr { color: #484f58; font-size: 0.72rem; }
+
+@media (max-width: 768px) {
+  .pseudo-layout { grid-template-columns: 1fr; height: auto; gap: 10px; }
+  .pseudo-viewer { min-height: 300px; }
+}
+
 /* ── Misc ── */
 .empty { text-align: center; padding: 48px 24px; color: #484f58; }
 .empty .icon { font-size: 2.2rem; margin-bottom: 10px; }
@@ -242,6 +269,8 @@ h2 { font-size: 1.1rem; color: #e6edf3; margin-bottom: 14px; font-weight: 600; d
     <div class="nav-item" data-panel="classes" onclick="showPanel('classes',this)">🏗️ Classes <span class="nav-badge" id="b-cls">-</span></div>
     <div class="nav-item" data-panel="asm" onclick="showPanel('asm',this)">⚙️ Assembly</div>
 
+    <div class="nav-item" data-panel="pseudo" onclick="showPanel('pseudo',this)">🧠 Pseudo Code</div>
+
     <div class="nav-sec">Scripts</div>
     <div class="nav-item" data-panel="frida" onclick="showPanel('frida',this)">🪝 Frida Script</div>
     <div class="nav-item" data-panel="r2" onclick="showPanel('r2',this)">📡 Radare2 Script</div>
@@ -291,6 +320,7 @@ function showPanel(name, el) {
   const panel = document.getElementById('panel-' + name);
   if (panel) panel.classList.add('active');
   if (name === 'asm' && !asmLoaded) loadAsmPanel();
+  if (name === 'pseudo' && !pseudoLoaded) loadPseudoPanel();
   if (name === 'strings' && !stringsLoaded) loadStringsPanel(0);
   // Auto-close sidebar on mobile after selection
   if (window.innerWidth <= 768) closeSidebar();
@@ -663,6 +693,151 @@ function buildR2(b) {
       </div>
       <div class="code-body"><pre id="r2-code">${esc(script)}</pre></div>
     </div>`;
+}
+
+// ── Pseudo Code ───────────────────────────────────────────────────────────────
+let pseudoLoaded = false;
+let pseudoTree = [];
+let currentPseudoKey = null;
+let pseudoViewMode = 'pseudo'; // 'pseudo' | 'asm'
+
+async function loadPseudoPanel() {
+  pseudoLoaded = true;
+  const p = getOrMakePanel('pseudo');
+  p.classList.add('active');
+  p.innerHTML = `<h2>🧠 Pseudo Code</h2><div style="color:#8b949e">Memuat daftar file...</div>`;
+
+  const r = await fetch('/results/' + JOB_ID + '/asm');
+  pseudoTree = await r.json();
+
+  if (pseudoTree.length === 0) {
+    p.innerHTML = `<h2>🧠 Pseudo Code</h2>
+      <div class="empty"><div class="icon">🧠</div>Pseudo code tidak tersedia (butuh decompilasi Blutter)</div>`;
+    return;
+  }
+
+  const byPkg = {};
+  pseudoTree.forEach(item => {
+    if (!byPkg[item.package]) byPkg[item.package] = [];
+    byPkg[item.package].push(item);
+  });
+
+  const treeHtml = Object.entries(byPkg).map(([pkg, files]) => `
+    <div class="asm-pkg-label">${esc(pkg)}</div>
+    ${files.map(f => `<div class="asm-file-item" data-key="${esc(f.key)}" onclick="loadPseudoFile('${esc(f.key)}')">${esc(f.file)}</div>`).join('')}
+  `).join('');
+
+  p.innerHTML = `
+    <h2>🧠 Pseudo Code <span style="font-size:0.75rem;color:#8b949e;font-weight:400">— analisa logika dari Dart assembly</span></h2>
+    <div class="pseudo-layout">
+      <div class="asm-tree">
+        <div class="asm-search"><input placeholder="Cari file..." oninput="filterPseudoTree(this.value)"></div>
+        <div class="asm-scroll" id="pseudo-scroll">${treeHtml}</div>
+      </div>
+      <div class="pseudo-viewer" id="pseudo-viewer">
+        <div class="pseudo-toolbar" id="pseudo-toolbar" style="display:none">
+          <span class="filename" id="pseudo-fname"></span>
+          <div class="view-toggle">
+            <button class="vt-btn active" id="vt-pseudo" onclick="setPseudoMode('pseudo')">🧠 Pseudo</button>
+            <button class="vt-btn" id="vt-asm" onclick="setPseudoMode('asm')">⚙️ ASM</button>
+          </div>
+          <button class="copy-btn" onclick="copyPseudoContent()">📋 Copy</button>
+        </div>
+        <div class="pseudo-code-body" id="pseudo-code-body">
+          <div class="asm-placeholder">← Pilih file untuk melihat pseudo code</div>
+        </div>
+      </div>
+    </div>`;
+}
+
+async function loadPseudoFile(key) {
+  currentPseudoKey = key;
+  document.querySelectorAll('#pseudo-scroll .asm-file-item').forEach(el => {
+    el.classList.toggle('active', el.dataset.key === key);
+  });
+
+  const toolbar = document.getElementById('pseudo-toolbar');
+  const body = document.getElementById('pseudo-code-body');
+  const fname = document.getElementById('pseudo-fname');
+  if (toolbar) toolbar.style.display = 'flex';
+  if (fname) fname.textContent = key;
+  if (body) body.innerHTML = '<div style="padding:14px;color:#58a6ff">⏳ Membuat pseudo code...</div>';
+
+  const url = pseudoViewMode === 'pseudo'
+    ? `/results/${JOB_ID}/pseudocode/${key}`
+    : `/results/${JOB_ID}/asm/${key}`;
+
+  const r = await fetch(url);
+  if (!r.ok) {
+    if (body) body.innerHTML = `<div style="padding:14px;color:#f85149">Gagal memuat: ${r.status}</div>`;
+    return;
+  }
+  const text = await r.text();
+  if (body) {
+    body.innerHTML = `<pre id="pseudo-pre">${pseudoViewMode === 'pseudo' ? syntaxHighlightPseudo(esc(text)) : esc(text)}</pre>`;
+  }
+  if (window.innerWidth <= 768) document.getElementById('pseudo-viewer')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function setPseudoMode(mode) {
+  pseudoViewMode = mode;
+  document.getElementById('vt-pseudo')?.classList.toggle('active', mode === 'pseudo');
+  document.getElementById('vt-asm')?.classList.toggle('active', mode === 'asm');
+  if (currentPseudoKey) loadPseudoFile(currentPseudoKey);
+}
+
+function filterPseudoTree(q) {
+  q = q.toLowerCase();
+  document.querySelectorAll('#pseudo-scroll .asm-file-item').forEach(el => {
+    el.style.display = el.dataset.key.toLowerCase().includes(q) ? '' : 'none';
+  });
+  document.querySelectorAll('#pseudo-scroll .asm-pkg-label').forEach(lbl => {
+    let next = lbl.nextElementSibling;
+    let hasVisible = false;
+    while (next && !next.classList.contains('asm-pkg-label')) {
+      if (next.style.display !== 'none') hasVisible = true;
+      next = next.nextElementSibling;
+    }
+    lbl.style.display = hasVisible ? '' : 'none';
+  });
+}
+
+function copyPseudoContent() {
+  const el = document.getElementById('pseudo-pre');
+  if (!el) return;
+  navigator.clipboard.writeText(el.innerText).then(() => {
+    const btn = event.target;
+    const orig = btn.textContent;
+    btn.textContent = '✅ Copied!';
+    setTimeout(() => btn.textContent = orig, 1500);
+  });
+}
+
+function syntaxHighlightPseudo(code) {
+  // Highlight keywords
+  const kws = ['class', 'extends', 'static', 'return', 'if', 'else', 'for', 'while',
+                'new', 'void', 'null', 'true', 'false', 'throw', 'final', 'const',
+                'dynamic', 'var', 'async', 'await', 'override'];
+  const builtins = ['String', 'int', 'double', 'bool', 'List', 'Map', 'Set',
+                    'Future', 'Stream', 'Object', 'Widget', 'BuildContext'];
+
+  return code
+    // Comments: preserve as-is with styling
+    .replace(/\/\/ @[^\n]*/g, m => `<span class="pseudo-addr">${m}</span>`)
+    .replace(/\/\/[^\n]*/g, m => `<span class="pseudo-cmt">${m}</span>`)
+    // Strings in quotes
+    .replace(/&quot;[^&]*&quot;/g, m => `<span class="pseudo-str">${m}</span>`)
+    // Numbers
+    .replace(/\b(0x[0-9a-fA-F]+|\d+)\b/g, m => `<span class="pseudo-num">${m}</span>`)
+    // Builtin types
+    .replace(new RegExp(`\\b(${builtins.join('|')})\\b`, 'g'), m => `<span class="pseudo-type">${m}</span>`)
+    // Keywords
+    .replace(new RegExp(`\\b(${kws.join('|')})\\b`, 'g'), m => `<span class="pseudo-kw">${m}</span>`)
+    // Function calls: name(
+    .replace(/([a-zA-Z_$][\w$]*)(?=\s*\()/g, (m, fn) => {
+      if (kws.includes(fn) || builtins.includes(fn)) return m;
+      return `<span class="pseudo-fn">${fn}</span>`;
+    });
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

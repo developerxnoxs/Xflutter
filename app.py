@@ -6,7 +6,7 @@ import zipfile
 from datetime import datetime
 from flask import Flask, render_template, request, jsonify, send_file, Response
 
-from static_scanner import scan_binary, parse_blutter_output, get_all_strings, get_asm_tree
+from static_scanner import scan_binary, parse_blutter_output, get_all_strings, get_asm_tree, pseudocode_from_asm_content
 from extract_dart_info import extract_dart_info
 from db import init_db, save_job, load_all_jobs, delete_job
 from il2cpp_parser import parse_metadata_file, scan_libil2cpp
@@ -218,9 +218,30 @@ def history():
     return render_template('history.html', jobs=job_list)
 
 
+def _get_job_or_fs(job_id):
+    """Return job dict from memory or reconstruct minimal dict from filesystem."""
+    job = jobs.get(job_id)
+    if job:
+        return job
+    # Fallback: check if result directory exists on disk
+    candidate_out = os.path.join(RESULTS_DIR, job_id)
+    if os.path.isdir(candidate_out):
+        return {
+            'id': job_id,
+            'status': 'done',
+            'log': [],
+            'scan': {},
+            'dart_info': {},
+            'blutter': {},
+            'out_dir': candidate_out,
+            'libapp_path': '',
+        }
+    return None
+
+
 @app.route('/results/<job_id>')
 def results(job_id):
-    job = jobs.get(job_id)
+    job = _get_job_or_fs(job_id)
     if not job:
         return render_template('error.html', message='Job tidak ditemukan'), 404
     return render_template('results.html', job=job)
@@ -228,7 +249,7 @@ def results(job_id):
 
 @app.route('/results/<job_id>/data')
 def results_data(job_id):
-    job = jobs.get(job_id)
+    job = _get_job_or_fs(job_id)
     if not job:
         return jsonify({'error': 'Job tidak ditemukan'}), 404
 
@@ -247,7 +268,7 @@ def results_data(job_id):
 @app.route('/results/<job_id>/strings')
 def strings_page(job_id):
     """Paginated all-strings endpoint."""
-    job = jobs.get(job_id)
+    job = _get_job_or_fs(job_id)
     if not job:
         return jsonify({'error': 'Job tidak ditemukan'}), 404
     libapp = job.get('libapp_path', '')
@@ -263,7 +284,7 @@ def strings_page(job_id):
 
 @app.route('/results/<job_id>/asm')
 def asm_list(job_id):
-    job = jobs.get(job_id)
+    job = _get_job_or_fs(job_id)
     if not job:
         return jsonify([])
     return jsonify(get_asm_tree(job['out_dir']))
@@ -271,7 +292,7 @@ def asm_list(job_id):
 
 @app.route('/results/<job_id>/asm/<path:filepath>')
 def asm_file(job_id, filepath):
-    job = jobs.get(job_id)
+    job = _get_job_or_fs(job_id)
     if not job:
         return 'Job tidak ditemukan', 404
     # filepath is like "cloud_mining/home_screen_main_page.dart"
@@ -283,6 +304,28 @@ def asm_file(job_id, filepath):
     if not os.path.isfile(full_path):
         return 'File tidak ditemukan', 404
     return send_file(full_path, mimetype='text/plain')
+
+
+@app.route('/results/<job_id>/pseudocode/<path:filepath>')
+def pseudocode_file(job_id, filepath):
+    """Return pseudo code translation of an ASM file."""
+    job = _get_job_or_fs(job_id)
+    if not job:
+        return 'Job tidak ditemukan', 404
+    full_path = os.path.join(job['out_dir'], 'asm', filepath)
+    full_path = os.path.realpath(full_path)
+    asm_dir = os.path.realpath(os.path.join(job['out_dir'], 'asm'))
+    if not full_path.startswith(asm_dir):
+        return 'Forbidden', 403
+    if not os.path.isfile(full_path):
+        return 'File tidak ditemukan', 404
+    try:
+        with open(full_path, 'r', errors='replace') as f:
+            content = f.read()
+        pseudo = pseudocode_from_asm_content(content, filepath)
+        return pseudo, 200, {'Content-Type': 'text/plain; charset=utf-8'}
+    except Exception as e:
+        return f'Error generating pseudo code: {e}', 500
 
 
 @app.route('/results/<job_id>/download/<path:filename>')

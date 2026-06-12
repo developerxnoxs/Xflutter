@@ -276,6 +276,264 @@ def parse_blutter_output(outdir: str) -> dict:
     return result
 
 
+def pseudocode_from_asm_content(content: str, filename: str = '') -> str:
+    """
+    Convert Blutter-style Dart assembly into readable pseudo code for logic analysis.
+    Parses high-level Blutter annotations and translates them into Dart-like pseudo code.
+    """
+    lines = content.splitlines()
+    output = []
+    indent = 0
+    in_method = False
+    reg_map = {}          # r0..rN → friendly names
+    param_names = []      # collected from SetupParameters
+    branch_targets = {}   # label addr → line index in output
+
+    _SKIP_OPS = {
+        'EnterFrame', 'LeaveFrame', 'CheckStackOverflow', 'AllocStack',
+        'ParallelMove', 'MoveArgument', 'Goto', 'TargetEntry', 'JoinEntry',
+        'Deopt', 'Deoptimize', 'SpeculativeInteger', 'ReThrow',
+    }
+
+    def _tab(n=None):
+        return '  ' * (indent if n is None else n)
+
+    def _reg_name(r):
+        return reg_map.get(r, r)
+
+    def _extract_call_target(comment):
+        """Extract human-readable call target from ; [...] comment."""
+        m = re.search(r';\s*(?:\[[^\]]+\]\s*)?([\w:.<> $]+(?:::[\w<>]+)?)\s*(?:\(|$)', comment)
+        if m:
+            t = m.group(1).strip()
+            if t and not t.startswith('0x') and t not in ('THR', 'PP'):
+                return t
+        return None
+
+    def _parse_high_level(line):
+        """
+        Parse a high-level Blutter annotation line of the form:
+          // 0xADDR: <operation>   (may be indented with spaces)
+        Returns a pseudo-code string or None to skip.
+        """
+        m = re.match(r'^\s*// (0x[0-9a-fA-F]+): (.+)$', line)
+        if not m:
+            return None
+        op = m.group(2).strip()
+
+        # ── Skip noise ────────────────────────────────────────────────────────
+        for skip in _SKIP_OPS:
+            if op.startswith(skip):
+                return None
+        if op.startswith('//') or op.startswith('stp') or op.startswith('mov'):
+            return None
+
+        # ── Register assignment: r? = ... ─────────────────────────────────────
+        assign = re.match(r'^(r\d+)\s*=\s*(.+)$', op)
+        if assign:
+            reg, rhs = assign.group(1), assign.group(2).strip()
+
+            # String literal
+            sm = re.match(r'^"([^"]*)"$', rhs)
+            if sm:
+                reg_map[reg] = f'"{sm.group(1)}"'
+                return f'{_tab()}// str: "{sm.group(1)}"'
+
+            # Number literal
+            if re.match(r'^-?\d+$', rhs) or re.match(r'^0x[0-9a-fA-F]+$', rhs):
+                reg_map[reg] = rhs
+                return None  # bare numbers as assignments are noise
+
+            # AllocateObject
+            am = re.match(r'^AllocateObject\((.+)\)$', rhs)
+            if am:
+                type_name = am.group(1).strip()
+                vname = f'new{type_name.split(".")[-1]}'
+                reg_map[reg] = vname
+                return f'{_tab()}{vname} = {type_name}()'
+
+            # AllocateClosure / Function reference
+            if rhs.startswith('AllocateClosure') or rhs.startswith('Function '):
+                reg_map[reg] = 'closure'
+                fm = re.search(r"'([^']+)'", rhs)
+                cname = fm.group(1) if fm else 'anonymous'
+                return f'{_tab()}closure_{reg} = /* lambda: {cname} */'
+
+            # Constant list / object pool constant
+            cm2 = re.match(r'^const \[(.{0,80})\]', rhs)
+            if cm2:
+                reg_map[reg] = f'const[{cm2.group(1)[:60]}]'
+                return f'{_tab()}// const list: [{cm2.group(1)[:60]}{"..." if len(cm2.group(1))>60 else ""}]'
+
+            # LoadClassIdInstr — skip (internal)
+            if rhs.startswith('LoadClassIdInstr'):
+                return None
+
+            # GDT (virtual/polymorphic dispatch)
+            if rhs.startswith('GDT['):
+                reg_map[reg] = 'result'
+                return f'{_tab()}result = /* virtual call */()'
+
+            # Generic call: someName()
+            call_m = re.match(r'^([\w$.<>:]+)\((.*)\)$', rhs)
+            if call_m:
+                fname = call_m.group(1)
+                args_raw = call_m.group(2).strip()
+                args = ', '.join(_reg_name(a.strip()) for a in args_raw.split(',') if a.strip()) if args_raw else ''
+                # Prefer a clean alias if comment available (already stripped here)
+                vname = fname.split('::')[-1].split('.')[-1] or 'result'
+                reg_map[reg] = f'{vname}Result'
+                return f'{_tab()}{vname}Result = {fname}({args})'
+
+            # Fallback: show rhs as comment
+            reg_map[reg] = rhs[:40]
+            return f'{_tab()}// {reg} = {rhs[:80]}'
+
+        # ── StoreField ────────────────────────────────────────────────────────
+        sf = re.match(r'^StoreField:\s*(r\d+)->(\S+)\s*=\s*(r\d+)', op)
+        if sf:
+            obj, field, val = sf.group(1), sf.group(2), sf.group(3)
+            obj_n = _reg_name(obj)
+            val_n = _reg_name(val)
+            field = field.replace('field_', '').replace('_', '').strip('.')
+            return f'{_tab()}{obj_n}.{field} = {val_n}'
+
+        # ── LoadField ─────────────────────────────────────────────────────────
+        lf = re.match(r'^(r\d+)\s*=\s*LoadField\((\w+),\s*(\S+)\)', op)
+        if lf:
+            reg, obj, field = lf.group(1), lf.group(2), lf.group(3)
+            obj_n = _reg_name(obj)
+            reg_map[reg] = f'{obj_n}_{field}'
+            return f'{_tab()}{obj_n}_{field} = {obj_n}.{field}'
+
+        # ── SetupParameters ───────────────────────────────────────────────────
+        sp = re.match(r'^SetupParameters\((.+)\)$', op)
+        if sp:
+            raw = sp.group(1)
+            params_parsed = re.findall(r'([\w$]+)\s*/\*\s*r(\d+)', raw)
+            for pname, preg in params_parsed:
+                reg_map[f'r{preg}'] = pname
+                param_names.append(pname)
+            return None  # Already visible in method signature
+
+        # ── Return ────────────────────────────────────────────────────────────
+        if op in ('ret', 'return') or op.startswith('Return'):
+            # find what register is likely being returned
+            ret_reg = re.search(r'r(\d+)', op)
+            ret_val = _reg_name(f'r{ret_reg.group(1)}') if ret_reg else 'result'
+            return f'{_tab()}return {ret_val}'
+
+        # ── Throw/Assert ──────────────────────────────────────────────────────
+        if op.startswith('Throw') or op.startswith('AssertBoolean'):
+            return f'{_tab()}throw /* {op[:60]} */'
+
+        # ── Branch / conditional ──────────────────────────────────────────────
+        branch_m = re.match(r'^if\s+(.+?)\s+goto\s+(L\w+)', op)
+        if branch_m:
+            cond, label = branch_m.group(1), branch_m.group(2)
+            cond = cond.replace('r0', _reg_name('r0')).replace('r1', _reg_name('r1'))
+            return f'{_tab()}if ({cond}) {{ /* goto {label} */ }}'
+
+        # ── Void method call (no assignment) ─────────────────────────────────
+        vcall = re.match(r'^([\w$.<>:]+)\(([^)]*)\)$', op)
+        if vcall:
+            fname = vcall.group(1)
+            args_raw = vcall.group(2).strip()
+            if fname not in ('EnterFrame', 'LeaveFrame', 'CheckStackOverflow'):
+                args = ', '.join(_reg_name(a.strip()) for a in args_raw.split(',') if a.strip()) if args_raw else ''
+                return f'{_tab()}{fname}({args})'
+
+        return None
+
+    # ── Main parse loop ───────────────────────────────────────────────────────
+    if filename:
+        output.append(f'// Pseudo code — {filename}')
+        output.append(f'// Generated by Xflutter pseudo code engine')
+        output.append('')
+
+    i = 0
+    while i < len(lines):
+        line = lines[i].rstrip()
+
+        # ── File/lib header comment ───────────────────────────────────────────
+        if line.startswith('// lib:') or re.match(r'^// class id:', line):
+            output.append(line)
+            i += 1
+            continue
+
+        # ── Class declaration ─────────────────────────────────────────────────
+        cls_m = re.match(r'^(class\s+.+)$', line)
+        if cls_m:
+            output.append('')
+            output.append(line)
+            indent = 1
+            reg_map.clear()
+            i += 1
+            continue
+
+        # ── Method declaration ────────────────────────────────────────────────
+        method_m = re.match(r'^  ((?:static\s+)?(?:\[closure\]\s+)?[\w$<>,? *]+)\s+([\w$<>.,? ]+)\((.*)\)\s*\{', line)
+        if method_m:
+            output.append('')
+            output.append(f'  {method_m.group(1)} {method_m.group(2).strip()}({method_m.group(3)}) {{')
+            indent = 2
+            in_method = True
+            reg_map.clear()
+            param_names.clear()
+            i += 1
+            continue
+
+        # ── Method close ──────────────────────────────────────────────────────
+        if line.strip() == '}' and in_method:
+            output.append('  }')
+            indent = 1
+            in_method = False
+            i += 1
+            continue
+
+        # ── Class close ───────────────────────────────────────────────────────
+        if line.strip() == '}' and not in_method:
+            output.append('}')
+            indent = 0
+            i += 1
+            continue
+
+        # ── Method address comment ────────────────────────────────────────────
+        if re.match(r'^\s*// \*\* addr:', line):
+            m2 = re.search(r'addr:\s*(0x[0-9a-fA-F]+)', line)
+            if m2:
+                output.append(f'    // @ {m2.group(1)}')
+            i += 1
+            continue
+
+        # ── High-level Blutter op: "    // 0xADDR: OP"
+        # High-level has exactly one space after //: "// 0x..."
+        # Low-level ARM has extra spaces: "//     0x..." or "//         opcode"
+        if re.match(r'^\s*// 0x[0-9a-fA-F]+: ', line) and in_method:
+            pseudo = _parse_high_level(line)
+            if pseudo:
+                output.append(pseudo)
+            i += 1
+            continue
+
+        # ── Low-level ARM asm (indented with extra spaces after //) ── skip ───
+        if re.match(r'^\s*//\s{2,}', line) and in_method:
+            i += 1
+            continue
+
+        # ── Bare ARM instruction lines ── skip ────────────────────────────────
+        if re.match(r'^\s+(stp|ldp|mov|ldr|str|add|sub|bl |blr|b\.|ret|cmp|ubfx|movz|adrp|sturw|sturd|stlr)', line):
+            i += 1
+            continue
+
+        i += 1
+
+    result = '\n'.join(output)
+    # Clean up excessive blank lines
+    result = re.sub(r'\n{3,}', '\n\n', result)
+    return result.strip()
+
+
 def get_asm_tree(outdir: str) -> list:
     """Return asm file tree as [{package, file, path_key}]."""
     asm_dir = os.path.join(outdir, 'asm')
