@@ -69,8 +69,12 @@ body { background: #0d1117; color: #c9d1d9; font-family: 'Segoe UI', system-ui, 
 /* ── Progress ── */
 .progress-section { display: none; margin-top: 24px; }
 .progress-section.active { display: block; }
-.progress-bar-wrap { background: #21262d; border-radius: 6px; height: 8px; overflow: hidden; margin: 14px 0; }
-.progress-bar { height: 100%; background: linear-gradient(90deg, #238636, #3fb950); border-radius: 6px; transition: width 0.3s; width: 0%; }
+.progress-bar-wrap { background: #21262d; border-radius: 6px; height: 10px; overflow: hidden; margin: 10px 0 4px; }
+.progress-bar { height: 100%; background: linear-gradient(90deg, #238636, #3fb950); border-radius: 6px; transition: width 0.25s ease; width: 0%; }
+.progress-bar.upload-mode { background: linear-gradient(90deg, #1f6feb, #58a6ff); }
+.progress-meta { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.progress-pct { font-size: 0.85rem; font-weight: 700; color: #58a6ff; font-variant-numeric: tabular-nums; }
+.progress-size { font-size: 0.78rem; color: #8b949e; font-variant-numeric: tabular-nums; }
 .log-box { background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: 14px; height: 200px; overflow-y: auto; font-family: 'Courier New', monospace; font-size: 0.8rem; line-height: 1.6; }
 .log-line { color: #8b949e; }
 .log-line.ok { color: #3fb950; }
@@ -208,7 +212,11 @@ body { background: #0d1117; color: #c9d1d9; font-family: 'Segoe UI', system-ui, 
 
     <div class="progress-section" id="progress-section">
       <div class="status-label" id="status-label">Memulai...</div>
-      <div class="progress-bar-wrap"><div class="progress-bar" id="progress-bar"></div></div>
+      <div class="progress-bar-wrap"><div class="progress-bar upload-mode" id="progress-bar"></div></div>
+      <div class="progress-meta">
+        <span class="progress-pct" id="progress-pct">0%</span>
+        <span class="progress-size" id="progress-size"></span>
+      </div>
       <div class="log-box" id="log-box"></div>
       <button class="view-results-btn" id="view-results-btn" onclick="viewResults()">📊 Lihat Hasil Lengkap</button>
     </div>
@@ -281,7 +289,11 @@ body { background: #0d1117; color: #c9d1d9; font-family: 'Segoe UI', system-ui, 
 
     <div class="progress-section" id="il2cpp-progress">
       <div class="status-label" id="il2cpp-status-label" style="color:#a371f7">Memulai...</div>
-      <div class="progress-bar-wrap"><div class="progress-bar" id="il2cpp-progress-bar" style="background:linear-gradient(90deg,#7c3aed,#a371f7)"></div></div>
+      <div class="progress-bar-wrap"><div class="progress-bar" id="il2cpp-progress-bar" style="background:linear-gradient(90deg,#58a6ff,#a371f7)"></div></div>
+      <div class="progress-meta">
+        <span class="progress-pct" id="il2cpp-progress-pct">0%</span>
+        <span class="progress-size" id="il2cpp-progress-size"></span>
+      </div>
       <div class="log-box" id="il2cpp-log-box"></div>
       <button class="view-results-btn" id="il2cpp-results-btn" onclick="viewIl2CppResults()" style="background:#7c3aed;display:none">📊 Lihat Hasil IL2CPP</button>
     </div>
@@ -315,7 +327,7 @@ function handleFile(input, dzId) {
   el.addEventListener('drop', e => { e.preventDefault(); el.classList.remove('dragover'); });
 });
 
-document.getElementById('upload-form').addEventListener('submit', async (e) => {
+document.getElementById('upload-form').addEventListener('submit', (e) => {
   e.preventDefault();
   const fd = new FormData(e.target);
   fd.set('mode', currentMode);
@@ -331,19 +343,49 @@ document.getElementById('upload-form').addEventListener('submit', async (e) => {
   document.getElementById('progress-section').classList.add('active');
   document.getElementById('log-box').innerHTML = '';
   document.getElementById('view-results-btn').style.display = 'none';
-  setProgress(5, 'Mengupload file...');
+  document.getElementById('progress-bar').classList.add('upload-mode');
+  setProgress(0, '📤 Mengupload file...');
 
-  const resp = await fetch('/analyze', { method: 'POST', body: fd });
-  const data = await resp.json();
-  if (data.error) { logLine('❌ ' + data.error, 'err'); return; }
+  const xhr = new XMLHttpRequest();
 
-  currentJobId = data.job_id;
-  pollStatus();
+  xhr.upload.addEventListener('progress', (ev) => {
+    if (!ev.lengthComputable) return;
+    const pct = Math.round((ev.loaded / ev.total) * 100);
+    const loaded = fmtBytes(ev.loaded);
+    const total  = fmtBytes(ev.total);
+    setProgress(pct, pct < 100 ? `📤 Mengupload... ${pct}%` : '⏳ Memproses di server...');
+    document.getElementById('progress-size').textContent = `${loaded} / ${total}`;
+  });
+
+  xhr.addEventListener('load', () => {
+    document.getElementById('progress-bar').classList.remove('upload-mode');
+    document.getElementById('progress-size').textContent = '';
+    let data;
+    try { data = JSON.parse(xhr.responseText); } catch { logLine('❌ Respon tidak valid dari server', 'err'); return; }
+    if (data.error) { logLine('❌ ' + data.error, 'err'); document.getElementById('analyze-btn').disabled = false; return; }
+    currentJobId = data.job_id;
+    pollStatus();
+  });
+
+  xhr.addEventListener('error', () => {
+    logLine('❌ Gagal koneksi ke server', 'err');
+    document.getElementById('analyze-btn').disabled = false;
+  });
+
+  xhr.open('POST', '/analyze');
+  xhr.send(fd);
 });
+
+function fmtBytes(b) {
+  if (b < 1024) return b + ' B';
+  if (b < 1024 * 1024) return (b / 1024).toFixed(1) + ' KB';
+  return (b / (1024 * 1024)).toFixed(1) + ' MB';
+}
 
 function setProgress(pct, label) {
   document.getElementById('progress-bar').style.width = pct + '%';
   document.getElementById('status-label').textContent = label;
+  document.getElementById('progress-pct').textContent = pct + '%';
 }
 
 const STATUS_MAP = {
@@ -414,7 +456,7 @@ function handleIl2CppFile(input, dzId, fnameId) {
   el.addEventListener('drop', e => { e.preventDefault(); el.classList.remove('dragover'); });
 });
 
-document.getElementById('il2cpp-form').addEventListener('submit', async (e) => {
+document.getElementById('il2cpp-form').addEventListener('submit', (e) => {
   e.preventDefault();
   if (!document.getElementById('meta-input').files.length) {
     alert('Pilih file global-metadata.dat terlebih dahulu.'); return;
@@ -425,14 +467,37 @@ document.getElementById('il2cpp-form').addEventListener('submit', async (e) => {
   document.getElementById('il2cpp-log-box').innerHTML = '';
   document.getElementById('il2cpp-results-btn').style.display = 'none';
   il2cppLastLogLen = 0;
-  setIl2CppProgress(5, 'Mengupload file...');
+  document.getElementById('il2cpp-progress-bar').style.background = 'linear-gradient(90deg,#58a6ff,#a371f7)';
+  setIl2CppProgress(0, '📤 Mengupload file...');
 
-  const resp = await fetch('/il2cpp/analyze', { method: 'POST', body: fd });
-  const data = await resp.json();
-  if (data.error) { il2cppLogLine('❌ ' + data.error, 'err'); document.getElementById('il2cpp-btn').disabled = false; return; }
+  const xhr = new XMLHttpRequest();
 
-  il2cppJobId = data.job_id;
-  pollIl2Cpp();
+  xhr.upload.addEventListener('progress', (ev) => {
+    if (!ev.lengthComputable) return;
+    const pct = Math.round((ev.loaded / ev.total) * 100);
+    const loaded = fmtBytes(ev.loaded);
+    const total  = fmtBytes(ev.total);
+    setIl2CppProgress(pct, pct < 100 ? `📤 Mengupload... ${pct}%` : '⏳ Memproses di server...');
+    document.getElementById('il2cpp-progress-size').textContent = `${loaded} / ${total}`;
+  });
+
+  xhr.addEventListener('load', () => {
+    document.getElementById('il2cpp-progress-bar').style.background = 'linear-gradient(90deg,#7c3aed,#a371f7)';
+    document.getElementById('il2cpp-progress-size').textContent = '';
+    let data;
+    try { data = JSON.parse(xhr.responseText); } catch { il2cppLogLine('❌ Respon tidak valid dari server', 'err'); return; }
+    if (data.error) { il2cppLogLine('❌ ' + data.error, 'err'); document.getElementById('il2cpp-btn').disabled = false; return; }
+    il2cppJobId = data.job_id;
+    pollIl2Cpp();
+  });
+
+  xhr.addEventListener('error', () => {
+    il2cppLogLine('❌ Gagal koneksi ke server', 'err');
+    document.getElementById('il2cpp-btn').disabled = false;
+  });
+
+  xhr.open('POST', '/il2cpp/analyze');
+  xhr.send(fd);
 });
 
 const IL2CPP_STATUS_MAP = {
@@ -472,6 +537,7 @@ async function pollIl2Cpp() {
 function setIl2CppProgress(pct, label) {
   document.getElementById('il2cpp-progress-bar').style.width = pct + '%';
   document.getElementById('il2cpp-status-label').textContent = label;
+  document.getElementById('il2cpp-progress-pct').textContent = pct + '%';
 }
 
 function il2cppLogLine(text, cls) {
